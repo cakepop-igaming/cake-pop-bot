@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Cake Pop</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    body {
+      background-color: #0f172a; color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 100vh; margin: 0; padding: 16px;
+    }
+    h1 { margin: 0 0 6px 0; font-size: 26px; color: #ff69b4; text-shadow: 0 0 10px rgba(255, 105, 180, 0.4); }
+    
+    .wallet-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      width: 100%; max-width: 360px; background: #1e293b;
+      padding: 10px 16px; border-radius: 12px; margin-bottom: 12px;
+      border: 1px solid #334155;
+    }
+    .balance { font-size: 16px; font-weight: bold; color: #facc15; }
+    .faucet-btn {
+      background: #3b82f6; color: white; border: none; padding: 6px 10px;
+      border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer;
+    }
+
+    .bet-panel {
+      display: flex; gap: 8px; width: 100%; max-width: 360px; margin-bottom: 12px;
+    }
+    .input-group { display: flex; flex-direction: column; flex: 1; }
+    .input-group label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; font-weight: bold; }
+    
+    input, select {
+      background: #1e293b; color: white; border: 1px solid #334155;
+      padding: 8px; border-radius: 8px; font-size: 14px; font-weight: bold; outline: none;
+    }
+
+    .action-btn {
+      background: #ec4899; color: white; border: none; padding: 12px;
+      border-radius: 10px; font-size: 16px; font-weight: bold; width: 100%;
+      max-width: 360px; margin-bottom: 12px; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+    }
+    .action-btn.cashout { background: #22c55e; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3); }
+
+    .status-panel {
+      display: flex; justify-content: space-between; width: 100%;
+      max-width: 360px; margin-bottom: 10px; font-weight: bold; color: #94a3b8; font-size: 13px;
+    }
+    .multiplier { color: #38bdf8; font-size: 15px; }
+
+    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; max-width: 360px; }
+    .cell {
+      aspect-ratio: 1; background: #1e293b; border: 2px solid #334155;
+      border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      font-size: 24px; cursor: pointer; transition: transform 0.1s, background-color 0.2s;
+    }
+    .cell.revealed-gem { background: #2e1065; border-color: #a855f7; box-shadow: 0 0 10px rgba(168, 85, 247, 0.4); }
+    .cell.revealed-bomb { background: #450a0a; border-color: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+  </style>
+</head>
+<body>
+
+  <h1>🧁 Cake Pop</h1>
+
+  <div class="wallet-bar">
+    <div>Баланс: <span class="balance" id="balanceText">1000</span> $CAKE</div>
+    <button class="faucet-btn" onclick="addBonus()">+500 🧁</button>
+  </div>
+
+  <div class="bet-panel">
+    <div class="input-group">
+      <label>СТАВКА ($CAKE)</label>
+      <input type="number" id="betAmount" value="50" min="10">
+    </div>
+    <div class="input-group">
+      <label>ЛОВУШКИ</label>
+      <select id="minesCount">
+        <option value="1">1</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="15">15</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="action-btn" id="mainBtn" onclick="handleMainAction()">СТАРТ</button>
+
+  <div class="status-panel">
+    <span>Множитель: <span class="multiplier" id="currentMult">1.00x</span></span>
+    <span>Выигрыш: <span style="color: #4ade80;" id="profitText">0 $CAKE</span></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    const GRID_SIZE = 25;
+    let mineIndices = new Set();
+    let revealedCount = 0;
+    let gameOver = true;
+    let currentMultiplier = 1.00;
+    let currentBet = 50;
+
+    let balance = parseFloat(localStorage.getItem('cake_balance')) || 1000;
+    updateBalanceDisplay();
+
+    function updateBalanceDisplay() {
+      document.getElementById('balanceText').innerText = Math.floor(balance);
+      localStorage.setItem('cake_balance', balance);
+    }
+
+    function addBonus() {
+      balance += 500;
+      updateBalanceDisplay();
+      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    }
+
+    function calculateMultiplier(mines, gems) {
+      if (gems === 0) return 1.00;
+      let prob = 1.0;
+      for (let i = 0; i < gems; i++) {
+        prob *= (GRID_SIZE - mines - i) / (GRID_SIZE - i);
+      }
+      return (0.98 / prob).toFixed(2); // 0.98 — Увеличили House Edge до 2% для более сбалансированной экономики
+    }
+
+    function handleMainAction() {
+      if (gameOver) {
+        startGame();
+      } else {
+        cashOut();
+      }
+    }
+
+    function startGame() {
+      const betInput = document.getElementById('betAmount');
+      currentBet = parseFloat(betInput.value);
+
+      if (isNaN(currentBet) || currentBet <= 0) {
+        alert("Введите корректную ставку!");
+        return;
+      }
+      if (currentBet > balance) {
+        alert("Недостаточно $CAKE на балансе!");
+        return;
+      }
+
+      balance -= currentBet;
+      updateBalanceDisplay();
+
+      const minesCount = parseInt(document.getElementById('minesCount').value);
+      mineIndices.clear();
+      while(mineIndices.size < minesCount) {
+        mineIndices.add(Math.floor(Math.random() * GRID_SIZE));
+      }
+
+      revealedCount = 0;
+      gameOver = false;
+      currentMultiplier = 1.00;
+
+      document.getElementById('betAmount').disabled = true;
+      document.getElementById('minesCount').disabled = true;
+      document.getElementById('currentMult').innerText = '1.00x';
+      document.getElementById('profitText').innerText = '0 $CAKE';
+      
+      const mainBtn = document.getElementById('mainBtn');
+      mainBtn.innerText = "ЗАБРАТЬ (0 $CAKE)";
+      mainBtn.classList.add('cashout');
+
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+      for (let i = 0; i < GRID_SIZE; i++) {
+        const cell = document.createElement('div');
+        cell.classList.add('cell');
+        cell.addEventListener('click', () => handleCellClick(cell, i, minesCount));
+        grid.appendChild(cell);
+      }
+    }
+
+    function handleCellClick(cell, index, minesCount) {
+      if (gameOver || cell.dataset.revealed) return;
+
+      cell.dataset.revealed = "true";
+
+      if (mineIndices.has(index)) {
+        cell.innerText = "❌";
+        cell.classList.add('revealed-bomb');
+        endGame(false);
+      } else {
+        cell.innerText = "🧁";
+        cell.classList.add('revealed-gem');
+        revealedCount++;
+
+        currentMultiplier = calculateMultiplier(minesCount, revealedCount);
+        const winTotal = Math.floor(currentBet * currentMultiplier);
+
+        document.getElementById('currentMult').innerText = currentMultiplier + 'x';
+        document.getElementById('profitText').innerText = `+${winTotal} $CAKE`;
+        
+        const mainBtn = document.getElementById('mainBtn');
+        mainBtn.innerText = `ЗАБРАТЬ (${winTotal} $CAKE)`;
+
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+      }
+    }
+
+    function cashOut() {
+      if (gameOver) return;
+      const winTotal = Math.floor(currentBet * currentMultiplier);
+      balance += winTotal;
+      updateBalanceDisplay();
+      endGame(true);
+    }
+
+    function endGame(isWin) {
+      gameOver = true;
+      
+      mineIndices.forEach(mIndex => {
+        const mCell = document.getElementById('grid').children[mIndex];
+        if (!mCell.dataset.revealed) {
+          mCell.innerText = "❌";
+          mCell.classList.add('revealed-bomb');
+        }
+      });
+
+      const mainBtn = document.getElementById('mainBtn');
+      mainBtn.classList.remove('cashout');
+      mainBtn.innerText = "НОВАЯ ИГРА";
+
+      document.getElementById('betAmount').disabled = false;
+      document.getElementById('minesCount').disabled = false;
+
+      if (isWin) {
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      } else {
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+      }
+    }
+  </script>
+</body>
+</html>
