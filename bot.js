@@ -27,3 +27,14 @@ bot.launch().then(() => {
 // Плавная остановка
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+const http = require('http');
+
+// Создаем минимальный HTTP-сервер для Render Free Tier
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Cake Pop Bot is alive!');
+}).listen(PORT, () => {
+  console.log(`🌐 HTTP-сервер слушает порт ${PORT}`);
+});
