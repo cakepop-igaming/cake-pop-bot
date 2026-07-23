@@ -98,224 +98,219 @@
   <div class="grid" id="grid"></div>
 
   <script>
-    const BACKEND_URL = 'https://cake-pop-bot.onrender.com'; 
+  const BACKEND_URL = 'https://cake-pop-bot.onrender.com'; 
 
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
 
-    // Получаем Telegram ID пользователя из WebApp SDK
-    const user = tg.initDataUnsafe?.user;
-    const telegramId = user ? user.id : 123456789; // Тестовый ID для обычного браузера
+  // Получаем Telegram ID пользователя из WebApp SDK
+  const user = tg.initDataUnsafe?.user;
+  const telegramId = user ? user.id : 123456789; // Тестовый ID для обычного браузера
 
-    const GRID_SIZE = 25;
-    let mineIndices = new Set();
-    let revealedCount = 0;
-    let gameOver = true;
-    let currentMultiplier = 1.00;
-    let currentBet = 50;
-    let balance = 0;
+  const GRID_SIZE = 25;
+  let mineIndices = new Set();
+  let revealedCount = 0;
+  let gameOver = true;
+  let currentMultiplier = 1.00;
+  let currentBet = 50;
+  let balance = 0;
 
-    // --- СИНХРОНИЗАЦИЯ С БАЗОЙ ДАННЫХ (SUPABASE) ---
+  // --- СИНХРОНИЗАЦИЯ С БАЗОЙ ДАННЫХ (SUPABASE) ---
 
-    // 1. Загрузка баланса из базы при старте
-    async function fetchUserBalance() {
-      try {
-        const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
-        const data = await response.json();
-        
-        if (data.balance !== undefined) {
-          balance = Number(data.balance);
-          updateBalanceDisplay();
-        }
-      } catch (err) {
-        console.error('Ошибка при загрузке баланса из БД:', err);
-      }
-    }
-
-    // 2. Отправка изменения баланса (ставка/выигрыш/бонус) на сервер
-    async function syncBalance(changeAmount) {
-      try {
-        const response = await fetch(`${BACKEND_URL}/api/game-result`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telegram_id: telegramId,
-            change_amount: changeAmount
-          })
-        });
-
-        const data = await response.json();
-        if (data.success && data.balance !== undefined) {
-          balance = Number(data.balance);
-          updateBalanceDisplay();
-        }
-      } catch (err) {
-        console.error('Ошибка синхронизации баланса:', err);
-      }
-    }
-
-    function updateBalanceDisplay() {
-      document.getElementById('balanceText').innerText = Math.floor(balance);
-    }
-
-    // Бонусная кнопка +500
-    async function addBonus() {
-      await syncBalance(500);
-      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-    }
-
-    function calculateMultiplier(mines, gems) {
-      if (gems === 0) return 1.00;
-      let prob = 1.0;
-      for (let i = 0; i < gems; i++) {
-        prob *= (GRID_SIZE - mines - i) / (GRID_SIZE - i);
-      }
-      return (0.98 / prob).toFixed(2);
-    }
-
-    function handleMainAction() {
-      if (gameOver) {
-        startGame();
+  // 1. Загрузка баланса из базы при старте
+  async function fetchUserBalance() {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
+      const data = await response.json();
+      
+      if (data.balance !== undefined) {
+        balance = Number(data.balance);
+        updateBalanceDisplay();
       } else {
-        cashOut();
+        console.warn('Сервер не вернул баланс:', data);
       }
+    } catch (err) {
+      console.error('Ошибка при загрузке баланса из БД:', err);
     }
+  }
 
-    async function startGame() {
-      const betInput = document.getElementById('betAmount');
-      currentBet = parseFloat(betInput.value);
-
-      if (isNaN(currentBet) || currentBet <= 0) {
-        alert("Введите корректную ставку!");
-        return;
-      }
-      if (currentBet > balance) {
-        alert("Недостаточно $CAKE на балансе!");
-        return;
-      }
-
-      // Списываем ставку в базе
-      await syncBalance(-currentBet);
-
-      const minesCount = parseInt(document.getElementById('minesCount').value);
-      
-      // Вспомогательная функция проверки: стоят ли 3 мины в один ряд
-      function isThreeInARow(set) {
-        if (set.size !== 3) return false;
-        const sorted = Array.from(set).sort((a, b) => a - b);
-
-        const isHorizontal = 
-          Math.floor(sorted[0] / 5) === Math.floor(sorted[1] / 5) &&
-          Math.floor(sorted[1] / 5) === Math.floor(sorted[2] / 5) &&
-          (sorted[1] - sorted[0] === 1) && (sorted[2] - sorted[1] === 1);
-
-        const isVertical = 
-          (sorted[1] - sorted[0] === 5) && (sorted[2] - sorted[1] === 5);
-
-        return isHorizontal || isVertical;
-      }
-
-      // Генерация ловушек с защитой от 3 в ряд
-      do {
-        mineIndices.clear();
-        while(mineIndices.size < minesCount) {
-          mineIndices.add(Math.floor(Math.random() * GRID_SIZE));
-        }
-      } while (isThreeInARow(mineIndices));
-
-      revealedCount = 0;
-      gameOver = false;
-      currentMultiplier = 1.00;
-
-      document.getElementById('betAmount').disabled = true;
-      document.getElementById('minesCount').disabled = true;
-      document.getElementById('currentMult').innerText = '1.00x';
-      document.getElementById('profitText').innerText = '0 $CAKE';
-      
-      const mainBtn = document.getElementById('mainBtn');
-      mainBtn.innerText = "ЗАБРАТЬ (0 $CAKE)";
-      mainBtn.classList.add('cashout');
-
-      const grid = document.getElementById('grid');
-      grid.innerHTML = '';
-      for (let i = 0; i < GRID_SIZE; i++) {
-        const cell = document.createElement('div');
-        cell.classList.add('cell');
-        cell.addEventListener('click', () => handleCellClick(cell, i, minesCount));
-        grid.appendChild(cell);
-      }
-    }
-
-    function handleCellClick(cell, index, minesCount) {
-      if (gameOver || cell.dataset.revealed) return;
-
-      cell.dataset.revealed = "true";
-
-      if (mineIndices.has(index)) {
-        cell.innerText = "❌";
-        cell.classList.add('revealed-bomb');
-        endGame(false);
-      } else {
-        cell.innerText = "🧁";
-        cell.classList.add('revealed-gem');
-        revealedCount++;
-
-        let rawMultiplier = calculateMultiplier(minesCount, revealedCount);
-        let adjustedMultiplier = rawMultiplier * 0.95;
-
-        if (adjustedMultiplier > 100) {
-          adjustedMultiplier = 100;
-        }
-
-        currentMultiplier = Number(adjustedMultiplier.toFixed(2));
-        const winTotal = Math.floor(currentBet * currentMultiplier);
-        document.getElementById('currentMult').innerText = currentMultiplier + 'x';
-        document.getElementById('profitText').innerText = `+${winTotal} $CAKE`;
-        
-        const mainBtn = document.getElementById('mainBtn');
-        mainBtn.innerText = `ЗАБРАТЬ (${winTotal} $CAKE)`;
-
-        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-      }
-    }
-
-    async function cashOut() {
-      if (gameOver) return;
-      const winTotal = Math.floor(currentBet * currentMultiplier);
-      
-      // Начисляем выигрыш в базе
-      await syncBalance(winTotal);
-      endGame(true);
-    }
-
-    function endGame(isWin) {
-      gameOver = true;
-      
-      mineIndices.forEach(mIndex => {
-        const mCell = document.getElementById('grid').children[mIndex];
-        if (!mCell.dataset.revealed) {
-          mCell.innerText = "❌";
-          mCell.classList.add('revealed-bomb');
-        }
+  // 2. Отправка изменения баланса на сервер
+  async function syncBalance(changeAmount) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/game-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: telegramId,
+          change_amount: changeAmount
+        })
       });
 
-      const mainBtn = document.getElementById('mainBtn');
-      mainBtn.classList.remove('cashout');
-      mainBtn.innerText = "НОВАЯ ИГРА";
-
-      document.getElementById('betAmount').disabled = false;
-      document.getElementById('minesCount').disabled = false;
-
-      if (isWin) {
-        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-      } else {
-        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+      const data = await response.json();
+      if (data.success && data.balance !== undefined) {
+        balance = Number(data.balance);
+        updateBalanceDisplay();
       }
+    } catch (err) {
+      console.error('Ошибка синхронизации баланса:', err);
+    }
+  }
+
+  function updateBalanceDisplay() {
+    document.getElementById('balanceText').innerText = Math.floor(balance);
+  }
+
+  async function addBonus() {
+    await syncBalance(500);
+    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+  }
+
+  function calculateMultiplier(mines, gems) {
+    if (gems === 0) return 1.00;
+    let prob = 1.0;
+    for (let i = 0; i < gems; i++) {
+      prob *= (GRID_SIZE - mines - i) / (GRID_SIZE - i);
+    }
+    return (0.98 / prob).toFixed(2);
+  }
+
+  function handleMainAction() {
+    if (gameOver) {
+      startGame();
+    } else {
+      cashOut();
+    }
+  }
+
+  async function startGame() {
+    const betInput = document.getElementById('betAmount');
+    currentBet = parseFloat(betInput.value);
+
+    if (isNaN(currentBet) || currentBet <= 0) {
+      alert("Введите корректную ставку!");
+      return;
+    }
+    if (currentBet > balance) {
+      alert("Недостаточно $CAKE на балансе!");
+      return;
     }
 
-    // Первичная загрузка баланса при запуске приложения
-    fetchUserBalance();
-  </script>
-</body>
-</html>
+    await syncBalance(-currentBet);
+
+    const minesCount = parseInt(document.getElementById('minesCount').value);
+    
+    function isThreeInARow(set) {
+      if (set.size !== 3) return false;
+      const sorted = Array.from(set).sort((a, b) => a - b);
+
+      const isHorizontal = 
+        Math.floor(sorted[0] / 5) === Math.floor(sorted[1] / 5) &&
+        Math.floor(sorted[1] / 5) === Math.floor(sorted[2] / 5) &&
+        (sorted[1] - sorted[0] === 1) && (sorted[2] - sorted[1] === 1);
+
+      const isVertical = 
+        (sorted[1] - sorted[0] === 5) && (sorted[2] - sorted[1] === 5);
+
+      return isHorizontal || isVertical;
+    }
+
+    do {
+      mineIndices.clear();
+      while(mineIndices.size < minesCount) {
+        mineIndices.add(Math.floor(Math.random() * GRID_SIZE));
+      }
+    } while (isThreeInARow(mineIndices));
+
+    revealedCount = 0;
+    gameOver = false;
+    currentMultiplier = 1.00;
+
+    document.getElementById('betAmount').disabled = true;
+    document.getElementById('minesCount').disabled = true;
+    document.getElementById('currentMult').innerText = '1.00x';
+    document.getElementById('profitText').innerText = '0 $CAKE';
+    
+    const mainBtn = document.getElementById('mainBtn');
+    mainBtn.innerText = "ЗАБРАТЬ (0 $CAKE)";
+    mainBtn.classList.add('cashout');
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < GRID_SIZE; i++) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      cell.addEventListener('click', () => handleCellClick(cell, i, minesCount));
+      grid.appendChild(cell);
+    }
+  }
+
+  function handleCellClick(cell, index, minesCount) {
+    if (gameOver || cell.dataset.revealed) return;
+
+    cell.dataset.revealed = "true";
+
+    if (mineIndices.has(index)) {
+      cell.innerText = "❌";
+      cell.classList.add('revealed-bomb');
+      endGame(false);
+    } else {
+      cell.innerText = "🧁";
+      cell.classList.add('revealed-gem');
+      revealedCount++;
+
+      let rawMultiplier = calculateMultiplier(minesCount, revealedCount);
+      let adjustedMultiplier = rawMultiplier * 0.95;
+
+      if (adjustedMultiplier > 100) {
+        adjustedMultiplier = 100;
+      }
+
+      currentMultiplier = Number(adjustedMultiplier.toFixed(2));
+      const winTotal = Math.floor(currentBet * currentMultiplier);
+      document.getElementById('currentMult').innerText = currentMultiplier + 'x';
+      document.getElementById('profitText').innerText = `+${winTotal} $CAKE`;
+      
+      const mainBtn = document.getElementById('mainBtn');
+      mainBtn.innerText = `ЗАБРАТЬ (${winTotal} $CAKE)`;
+
+      if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+    }
+  }
+
+  async function cashOut() {
+    if (gameOver) return;
+    const winTotal = Math.floor(currentBet * currentMultiplier);
+    
+    await syncBalance(winTotal);
+    endGame(true);
+  }
+
+  function endGame(isWin) {
+    gameOver = true;
+    
+    mineIndices.forEach(mIndex => {
+      const mCell = document.getElementById('grid').children[mIndex];
+      if (!mCell.dataset.revealed) {
+        mCell.innerText = "❌";
+        mCell.classList.add('revealed-bomb');
+      }
+    });
+
+    const mainBtn = document.getElementById('mainBtn');
+    mainBtn.classList.remove('cashout');
+    mainBtn.innerText = "НОВАЯ ИГРА";
+
+    document.getElementById('betAmount').disabled = false;
+    document.getElementById('minesCount').disabled = false;
+
+    if (isWin) {
+      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    } else {
+      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+    }
+  }
+
+  // Запуск первичной загрузки баланса
+  fetchUserBalance();
+</script>
