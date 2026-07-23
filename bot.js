@@ -117,6 +117,64 @@ app.get('/api/user', async (req, res) => {
   }
 });
 
+// ЭНДПОИНТ #2: Изменение баланса по результату игры
+app.post('/api/game-result', async (req, res) => {
+  const { telegram_id, change_amount } = req.body;
+
+  // Проверка входных данных
+  if (!telegram_id || change_amount === undefined || isNaN(change_amount)) {
+    return res.status(400).json({ error: 'Неверные параметры запроса' });
+  }
+
+  try {
+    // 1. Получаем текущего пользователя из Supabase
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('balance')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    if (fetchError || !user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    // 2. Рассчитываем новый баланс
+    const currentBalance = Number(user.balance);
+    const amount = Number(change_amount);
+    const newBalance = currentBalance + amount;
+
+    // Защита от отрицательного баланса
+    if (newBalance < 0) {
+      return res.status(400).json({ error: 'Недостаточно средств на балансе' });
+    }
+
+    // 3. Сохраняем новый баланс в Supabase
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
+      .update({ balance: newBalance })
+      .eq('telegram_id', telegram_id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Ошибка обновления баланса в Supabase:', updateError);
+      return res.status(500).json({ error: 'Не удалось обновить баланс' });
+    }
+
+    console.log(`💰 Баланс ${telegram_id} изменен на ${amount}. Новый баланс: ${updatedUser.balance}`);
+
+    // Отправляем новый баланс обратно в Mini App
+    return res.json({
+      success: true,
+      balance: updatedUser.balance
+    });
+
+  } catch (err) {
+    console.error('Ошибка в POST /api/game-result:', err);
+    return res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  }
+});
+
 // Служебный маршрут для пинга UptimeRobot
 app.get('/', (req, res) => {
   res.send('Cake Pop Bot & API are alive!');
