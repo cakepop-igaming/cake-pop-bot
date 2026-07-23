@@ -104,9 +104,8 @@
   tg.ready();
   tg.expand();
 
-  // Получаем Telegram ID пользователя из WebApp SDK
   const user = tg.initDataUnsafe?.user;
-  const telegramId = user ? user.id : 123456789; // Тестовый ID для обычного браузера
+  const telegramId = user ? user.id : 123456789;
 
   const GRID_SIZE = 25;
   let mineIndices = new Set();
@@ -116,9 +115,6 @@
   let currentBet = 50;
   let balance = 0;
 
-  // --- СИНХРОНИЗАЦИЯ С БАЗОЙ ДАННЫХ (SUPABASE) ---
-
-  // 1. Загрузка баланса из базы при старте
   async function fetchUserBalance() {
     try {
       const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
@@ -135,7 +131,6 @@
     }
   }
 
-  // 2. Отправка изменения баланса на сервер
   async function syncBalance(changeAmount) {
     try {
       const response = await fetch(`${BACKEND_URL}/api/game-result`, {
@@ -183,6 +178,16 @@
     }
   }
 
+  function renderEmptyGrid() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < GRID_SIZE; i++) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      grid.appendChild(cell);
+    }
+  }
+
   async function startGame() {
     const betInput = document.getElementById('betAmount');
     currentBet = parseFloat(betInput.value);
@@ -200,7 +205,8 @@
 
     const minesCount = parseInt(document.getElementById('minesCount').value);
     
-    function isThreeInARow(set) {
+    // Проверка на 3 в ряд работает только если выбрано ровно 3 мины
+    function hasThreeInARow(set) {
       if (set.size !== 3) return false;
       const sorted = Array.from(set).sort((a, b) => a - b);
 
@@ -215,12 +221,14 @@
       return isHorizontal || isVertical;
     }
 
+    let attempts = 0;
     do {
       mineIndices.clear();
       while(mineIndices.size < minesCount) {
         mineIndices.add(Math.floor(Math.random() * GRID_SIZE));
       }
-    } while (isThreeInARow(mineIndices));
+      attempts++;
+    } while (minesCount === 3 && hasThreeInARow(mineIndices) && attempts < 100);
 
     revealedCount = 0;
     gameOver = false;
@@ -311,6 +319,9 @@
     }
   }
 
-  // Запуск первичной загрузки баланса
+  // Первичная инициализация при открытии
+  renderEmptyGrid();
   fetchUserBalance();
-</script>
+  </script>
+</body>
+</html>
