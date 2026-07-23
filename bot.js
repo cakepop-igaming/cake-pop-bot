@@ -4,14 +4,50 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-// 1. Инициализация Supabase
+// ==========================================
+// 1. ИНИЦИАЛИЗАЦИЯ SUPABASE
+// ==========================================
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// 2. Инициализация Ботa
+// ==========================================
+// 2. ИНИЦИАЛИЗАЦИЯ TELEGRAM БОТА
+// ==========================================
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://cake-pop-nine.vercel.app';
+
+// Вспомогательная функция: Получить или создать юзера в БД
+async function getOrCreateUser(telegramId, username = 'Gamer') {
+  let { data: existingUser, error: selectError } = await supabase
+    .from('users')
+    .select('*')
+    .eq('telegram_id', telegramId)
+    .single();
+
+  if (!existingUser) {
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert([
+        { 
+          telegram_id: telegramId, 
+          username: username, 
+          balance: 1000.00 
+        }
+      ])
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Ошибка создания юзера в Supabase:', insertError);
+      return null;
+    }
+    console.log(`✨ Новый игрок зарегистрирован в БД: ${username} (${telegramId})`);
+    return newUser;
+  }
+
+  return existingUser;
+}
 
 bot.start(async (ctx) => {
   const user = ctx.from;
@@ -20,38 +56,8 @@ bot.start(async (ctx) => {
   const usernameHandle = user.username || userName;
 
   try {
-    let { data: existingUser, error: selectError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('telegram_id', telegramId)
-      .single();
-
-    if (selectError && selectError.code !== 'PGRST116') {
-      console.error('Ошибка при поиске юзера в Supabase:', selectError);
-    }
-
-    if (!existingUser) {
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert([
-          { 
-            telegram_id: telegramId, 
-            username: usernameHandle, 
-            balance: 1000.00 
-          }
-        ])
-        .select()
-        .single();
-
-      if (insertError) {
-        console.error('Ошибка создания юзера в Supabase:', insertError);
-      } else {
-        existingUser = newUser;
-        console.log(`✨ Новый игрок зарегистрирован в БД: ${usernameHandle} (${telegramId})`);
-      }
-    }
-
-    const currentBalance = existingUser ? existingUser.balance : 1000.00;
+    const dbUser = await getOrCreateUser(telegramId, usernameHandle);
+    const currentBalance = dbUser ? dbUser.balance : 1000.00;
 
     const text = `Привет, ${userName}! 🧁\n\n` +
                  `Добро пожаловать в Cake Pop!\n` +
@@ -84,8 +90,10 @@ process.once('SIGTERM', () => bot.stop('SIGTERM'));
 // 3. ИНИЦИАЛИЗАЦИЯ EXPRESS СЕРВЕРА С ЭНДПОИНТАМИ
 // ==========================================
 const app = express();
-app.use(cors()); // Разрешаем запросы с любых фронтендов (Vercel)
-app.use(express.json()); // Включаем разбор JSON
+
+// Настройка CORS (разрешаем WebApp с Vercel общаться с Render)
+app.use(cors());
+app.use(express.json());
 
 // ЭНДПОИНТ #1: Получение пользователя и его баланса
 app.get('/api/user', async (req, res) => {
@@ -96,14 +104,11 @@ app.get('/api/user', async (req, res) => {
   }
 
   try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('telegram_id', telegramId)
-      .single();
+    // Получаем юзера или создаем его (если зашли впервые или тестируем)
+    const user = await getOrCreateUser(telegramId);
 
-    if (error || !user) {
-      return res.status(404).json({ error: 'Пользователь не найден' });
+    if (!user) {
+      return res.status(500).json({ error: 'Не удалось получить данные пользователя' });
     }
 
     return res.json({
@@ -121,20 +126,15 @@ app.get('/api/user', async (req, res) => {
 app.post('/api/game-result', async (req, res) => {
   const { telegram_id, change_amount } = req.body;
 
-  // Проверка входных данных
   if (!telegram_id || change_amount === undefined || isNaN(change_amount)) {
     return res.status(400).json({ error: 'Неверные параметры запроса' });
   }
 
   try {
-    // 1. Получаем текущего пользователя из Supabase
-    const { data: user, error: fetchError } = await supabase
-      .from('users')
-      .select('balance')
-      .eq('telegram_id', telegram_id)
-      .single();
+    // 1. Получаем юзера (или создаём, если не существует)
+    const user = await getOrCreateUser(telegram_id);
 
-    if (fetchError || !user) {
+    if (!user) {
       return res.status(404).json({ error: 'Пользователь не найден' });
     }
 
@@ -143,7 +143,7 @@ app.post('/api/game-result', async (req, res) => {
     const amount = Number(change_amount);
     const newBalance = currentBalance + amount;
 
-    // Защита от отрицательного баланса
+    // Защита от ухода баланса в минус
     if (newBalance < 0) {
       return res.status(400).json({ error: 'Недостаточно средств на балансе' });
     }
@@ -163,7 +163,6 @@ app.post('/api/game-result', async (req, res) => {
 
     console.log(`💰 Баланс ${telegram_id} изменен на ${amount}. Новый баланс: ${updatedUser.balance}`);
 
-    // Отправляем новый баланс обратно в Mini App
     return res.json({
       success: true,
       balance: updatedUser.balance
@@ -175,7 +174,7 @@ app.post('/api/game-result', async (req, res) => {
   }
 });
 
-// Служебный маршрут для пинга UptimeRobot
+// Пинг для UptimeRobot
 app.get('/', (req, res) => {
   res.send('Cake Pop Bot & API are alive!');
 });
