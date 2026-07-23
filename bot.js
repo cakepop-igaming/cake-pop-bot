@@ -1,16 +1,18 @@
 const { Telegraf, Markup } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
+const express = require('express');
+const cors = require('cors');
 require('dotenv').config();
 
-// Инициализация Supabase клиентом с Service Role
+// 1. Инициализация Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// 2. Инициализация Ботa
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://cake-pop-nine.vercel.app';
 
-// Ответ на команду /start
 bot.start(async (ctx) => {
   const user = ctx.from;
   const telegramId = user.id;
@@ -18,18 +20,16 @@ bot.start(async (ctx) => {
   const usernameHandle = user.username || userName;
 
   try {
-    // 1. Проверяем, есть ли пользователь в базе Supabase
     let { data: existingUser, error: selectError } = await supabase
       .from('users')
       .select('*')
       .eq('telegram_id', telegramId)
       .single();
 
-    if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = строка не найдена
+    if (selectError && selectError.code !== 'PGRST116') {
       console.error('Ошибка при поиске юзера в Supabase:', selectError);
     }
 
-    // 2. Если пользователя нет — создаем новую запись со стартовым балансом
     if (!existingUser) {
       const { data: newUser, error: insertError } = await supabase
         .from('users')
@@ -37,7 +37,7 @@ bot.start(async (ctx) => {
           { 
             telegram_id: telegramId, 
             username: usernameHandle, 
-            balance: 1000.00 // Стартовый баланс
+            balance: 1000.00 
           }
         ])
         .select()
@@ -51,7 +51,6 @@ bot.start(async (ctx) => {
       }
     }
 
-    // Получаем текущий баланс пользователя из БД
     const currentBalance = existingUser ? existingUser.balance : 1000.00;
 
     const text = `Привет, ${userName}! 🧁\n\n` +
@@ -73,22 +72,57 @@ bot.start(async (ctx) => {
   }
 });
 
-// Сообщение в консоль при запуске
+// Запуск бота
 bot.launch().then(() => {
   console.log('🚀 Бот Cake Pop успешно запущен и работает!');
 });
 
-// Плавная остановка
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-const http = require('http');
+// ==========================================
+// 3. ИНИЦИАЛИЗАЦИЯ EXPRESS СЕРВЕРА С ЭНДПОИНТАМИ
+// ==========================================
+const app = express();
+app.use(cors()); // Разрешаем запросы с любых фронтендов (Vercel)
+app.use(express.json()); // Включаем разбор JSON
 
-// Создаем минимальный HTTP-сервер для Render Free Tier
+// ЭНДПОИНТ #1: Получение пользователя и его баланса
+app.get('/api/user', async (req, res) => {
+  const telegramId = req.query.telegram_id;
+
+  if (!telegramId) {
+    return res.status(400).json({ error: 'telegram_id обязателен' });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    return res.json({
+      telegram_id: user.telegram_id,
+      username: user.username,
+      balance: user.balance
+    });
+  } catch (err) {
+    console.error('Ошибка в GET /api/user:', err);
+    return res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  }
+});
+
+// Служебный маршрут для пинга UptimeRobot
+app.get('/', (req, res) => {
+  res.send('Cake Pop Bot & API are alive!');
+});
+
 const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Cake Pop Bot is alive!');
-}).listen(PORT, () => {
-  console.log(`🌐 HTTP-сервер слушает порт ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🌐 Express API сервер слушает порт ${PORT}`);
 });
