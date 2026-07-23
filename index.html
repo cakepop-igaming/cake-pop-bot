@@ -67,7 +67,7 @@
   <h1>🧁 Cake Pop</h1>
 
   <div class="wallet-bar">
-    <div>Баланс: <span class="balance" id="balanceText">1000</span> $CAKE</div>
+    <div>Баланс: <span class="balance" id="balanceText">Загрузка...</span> $CAKE</div>
     <button class="faucet-btn" onclick="addBonus()">+500 🧁</button>
   </div>
 
@@ -98,9 +98,15 @@
   <div class="grid" id="grid"></div>
 
   <script>
+    const BACKEND_URL = 'cake-pop-bot.onrender.com'; 
+
     const tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
+
+    // Получаем Telegram ID пользователя из WebApp SDK
+    const user = tg.initDataUnsafe?.user;
+    const telegramId = user ? user.id : 123456789; // Тестовый ID для обычного браузера
 
     const GRID_SIZE = 25;
     let mineIndices = new Set();
@@ -108,18 +114,54 @@
     let gameOver = true;
     let currentMultiplier = 1.00;
     let currentBet = 50;
+    let balance = 0;
 
-    let balance = parseFloat(localStorage.getItem('cake_balance')) || 1000;
-    updateBalanceDisplay();
+    // --- СИНХРОНИЗАЦИЯ С БАЗОЙ ДАННЫХ (SUPABASE) ---
+
+    // 1. Загрузка баланса из базы при старте
+    async function fetchUserBalance() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
+        const data = await response.json();
+        
+        if (data.balance !== undefined) {
+          balance = Number(data.balance);
+          updateBalanceDisplay();
+        }
+      } catch (err) {
+        console.error('Ошибка при загрузке баланса из БД:', err);
+      }
+    }
+
+    // 2. Отправка изменения баланса (ставка/выигрыш/бонус) на сервер
+    async function syncBalance(changeAmount) {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/game-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            telegram_id: telegramId,
+            change_amount: changeAmount
+          })
+        });
+
+        const data = await response.json();
+        if (data.success && data.balance !== undefined) {
+          balance = Number(data.balance);
+          updateBalanceDisplay();
+        }
+      } catch (err) {
+        console.error('Ошибка синхронизации баланса:', err);
+      }
+    }
 
     function updateBalanceDisplay() {
       document.getElementById('balanceText').innerText = Math.floor(balance);
-      localStorage.setItem('cake_balance', balance);
     }
 
-    function addBonus() {
-      balance += 500;
-      updateBalanceDisplay();
+    // Бонусная кнопка +500
+    async function addBonus() {
+      await syncBalance(500);
       if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     }
 
@@ -129,7 +171,7 @@
       for (let i = 0; i < gems; i++) {
         prob *= (GRID_SIZE - mines - i) / (GRID_SIZE - i);
       }
-      return (0.98 / prob).toFixed(2); // 0.98 — Увеличили House Edge до 2% для более сбалансированной экономики
+      return (0.98 / prob).toFixed(2);
     }
 
     function handleMainAction() {
@@ -140,7 +182,7 @@
       }
     }
 
-    function startGame() {
+    async function startGame() {
       const betInput = document.getElementById('betAmount');
       currentBet = parseFloat(betInput.value);
 
@@ -153,23 +195,21 @@
         return;
       }
 
-      balance -= currentBet;
-      updateBalanceDisplay();
+      // Списываем ставку в базе
+      await syncBalance(-currentBet);
 
       const minesCount = parseInt(document.getElementById('minesCount').value);
       
-      // Вспомогательная функция проверки: стоят ли 3 мины в один ряд (вдоль или поперек)
+      // Вспомогательная функция проверки: стоят ли 3 мины в один ряд
       function isThreeInARow(set) {
         if (set.size !== 3) return false;
         const sorted = Array.from(set).sort((a, b) => a - b);
 
-        // По горизонтали (в одной строке 5x5 и подряд)
         const isHorizontal = 
           Math.floor(sorted[0] / 5) === Math.floor(sorted[1] / 5) &&
           Math.floor(sorted[1] / 5) === Math.floor(sorted[2] / 5) &&
           (sorted[1] - sorted[0] === 1) && (sorted[2] - sorted[1] === 1);
 
-        // По вертикали (в одном столбце)
         const isVertical = 
           (sorted[1] - sorted[0] === 5) && (sorted[2] - sorted[1] === 5);
 
@@ -221,11 +261,9 @@
         cell.classList.add('revealed-gem');
         revealedCount++;
 
-        // Считаем чистый множитель и применяем 5% House Edge (комиссию заведения)
         let rawMultiplier = calculateMultiplier(minesCount, revealedCount);
         let adjustedMultiplier = rawMultiplier * 0.95;
 
-        // Ограничиваем максимальный X (например, не больше 100x)
         if (adjustedMultiplier > 100) {
           adjustedMultiplier = 100;
         }
@@ -242,11 +280,12 @@
       }
     }
 
-    function cashOut() {
+    async function cashOut() {
       if (gameOver) return;
       const winTotal = Math.floor(currentBet * currentMultiplier);
-      balance += winTotal;
-      updateBalanceDisplay();
+      
+      // Начисляем выигрыш в базе
+      await syncBalance(winTotal);
       endGame(true);
     }
 
@@ -274,6 +313,9 @@
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
       }
     }
+
+    // Первичная загрузка баланса при запуске приложения
+    fetchUserBalance();
   </script>
 </body>
 </html>
