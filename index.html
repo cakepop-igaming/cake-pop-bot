@@ -157,10 +157,32 @@
       updateBalanceDisplay();
 
       const minesCount = parseInt(document.getElementById('minesCount').value);
-      mineIndices.clear();
-      while(mineIndices.size < minesCount) {
-        mineIndices.add(Math.floor(Math.random() * GRID_SIZE));
+      
+      // Вспомогательная функция проверки: стоят ли 3 мины в один ряд (вдоль или поперек)
+      function isThreeInARow(set) {
+        if (set.size !== 3) return false;
+        const sorted = Array.from(set).sort((a, b) => a - b);
+
+        // По горизонтали (в одной строке 5x5 и подряд)
+        const isHorizontal = 
+          Math.floor(sorted[0] / 5) === Math.floor(sorted[1] / 5) &&
+          Math.floor(sorted[1] / 5) === Math.floor(sorted[2] / 5) &&
+          (sorted[1] - sorted[0] === 1) && (sorted[2] - sorted[1] === 1);
+
+        // По вертикали (в одном столбце)
+        const isVertical = 
+          (sorted[1] - sorted[0] === 5) && (sorted[2] - sorted[1] === 5);
+
+        return isHorizontal || isVertical;
       }
+
+      // Генерация ловушек с защитой от 3 в ряд
+      do {
+        mineIndices.clear();
+        while(mineIndices.size < minesCount) {
+          mineIndices.add(Math.floor(Math.random() * GRID_SIZE));
+        }
+      } while (isThreeInARow(mineIndices));
 
       revealedCount = 0;
       gameOver = false;
@@ -199,9 +221,17 @@
         cell.classList.add('revealed-gem');
         revealedCount++;
 
-        currentMultiplier = calculateMultiplier(minesCount, revealedCount);
-        const winTotal = Math.floor(currentBet * currentMultiplier);
+        // Считаем чистый множитель и применяем 5% House Edge (комиссию заведения)
+        let rawMultiplier = calculateMultiplier(minesCount, revealedCount);
+        let adjustedMultiplier = rawMultiplier * 0.95;
 
+        // Ограничиваем максимальный X (например, не больше 100x)
+        if (adjustedMultiplier > 100) {
+          adjustedMultiplier = 100;
+        }
+
+        currentMultiplier = Number(adjustedMultiplier.toFixed(2));
+        const winTotal = Math.floor(currentBet * currentMultiplier);
         document.getElementById('currentMult').innerText = currentMultiplier + 'x';
         document.getElementById('profitText').innerText = `+${winTotal} $CAKE`;
         
