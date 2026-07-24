@@ -97,23 +97,21 @@
 
   <div class="grid" id="grid"></div>
 
-  <script>
-  alert("СТАРТ ПРИЛОЖЕНИЯ"); 
-
+ <script>
   const BACKEND_URL = 'https://cake-pop-bot.onrender.com';
 
-  // 1. Безопасная инициализация Telegram
+  // Безопасная инициализация Telegram
   const tg = window.Telegram?.WebApp;
   if (tg) {
     try {
       tg.ready();
       tg.expand();
     } catch (e) {
-      console.log('Telegram WebApp не найден, запуск в браузере');
+      console.log('Запуск в обычном браузере');
     }
   }
 
-  // 2. Безопасное получение telegramId
+  // Получаем telegramId без лишних alert
   const user = tg?.initDataUnsafe?.user;
   const telegramId = user ? user.id : 123456789;
 
@@ -125,54 +123,54 @@
   let currentBet = 50;
   let balance = 0;
 
-  // 3. Загрузка баланса из Supabase
- async function fetchUserBalance() {
-  alert("Текущий telegramId: " + telegramId); 
-  try {
-      console.log('Отправляем запрос баланса для ID:', telegramId);
+  // Быстрое отображение баланса
+  function updateBalanceDisplay() {
+    const el = document.getElementById('balanceText');
+    if (el) el.innerText = Math.floor(balance);
+  }
+
+  // Загрузка баланса из базы при старте
+  async function fetchUserBalance() {
+    try {
       const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
       const data = await response.json();
 
       if (data.balance !== undefined) {
         balance = Number(data.balance);
         updateBalanceDisplay();
-      } else {
-        console.warn('Сервер не вернул баланс:', data);
       }
     } catch (err) {
-      console.error('Ошибка при загрузке баланса из БД:', err);
+      console.error('Ошибка загрузки баланса:', err);
     }
   }
 
-  // 4. Отправка выигрыша/списания в Supabase
-  async function syncBalance(changeAmount) {
-    try {
-      console.log('Отправляем изменение баланса:', changeAmount);
-      const response = await fetch(`${BACKEND_URL}/api/game-result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telegram_id: telegramId,
-          change_amount: changeAmount
-        })
-      });
+  // Мгновенная синхронизация (без задержки интерфейса)
+  function syncBalance(changeAmount) {
+    // 1. Меняем баланс на экране МГНОВЕННО
+    balance += changeAmount;
+    updateBalanceDisplay();
 
-      const data = await response.json();
+    // 2. Отправляем на сервер в фоновом режиме
+    fetch(`${BACKEND_URL}/api/game-result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telegram_id: telegramId,
+        change_amount: changeAmount
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
       if (data.success && data.balance !== undefined) {
         balance = Number(data.balance);
         updateBalanceDisplay();
       }
-    } catch (err) {
-      console.error('Ошибка синхронизации баланса:', err);
-    }
+    })
+    .catch(err => console.error('Ошибка фоновой синхронизации:', err));
   }
 
-  function updateBalanceDisplay() {
-    document.getElementById('balanceText').innerText = Math.floor(balance);
-  }
-
-  async function addBonus() {
-    await syncBalance(500);
+  function addBonus() {
+    syncBalance(500);
     if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
   }
 
@@ -204,7 +202,7 @@
     }
   }
 
-  async function startGame() {
+  function startGame() {
     const betInput = document.getElementById('betAmount');
     currentBet = parseFloat(betInput.value);
 
@@ -217,7 +215,8 @@
       return;
     }
 
-    await syncBalance(-currentBet);
+    // Списываем ставку мгновенно
+    syncBalance(-currentBet);
 
     const minesCount = parseInt(document.getElementById('minesCount').value);
 
@@ -301,11 +300,12 @@
     }
   }
 
-  async function cashOut() {
+  function cashOut() {
     if (gameOver) return;
     const winTotal = Math.floor(currentBet * currentMultiplier);
     
-    await syncBalance(winTotal);
+    // Начисляем выигрыш мгновенно
+    syncBalance(winTotal);
     endGame(true);
   }
 
@@ -334,7 +334,6 @@
     }
   }
 
-  // 5. ГАРАНТИРОВАННЫЙ ЗАПУСК ПОСЛЕ ЗАГРУЗКИ DOM
   document.addEventListener('DOMContentLoaded', () => {
     renderEmptyGrid();
     fetchUserBalance();
