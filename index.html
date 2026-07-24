@@ -98,23 +98,22 @@
   <div class="grid" id="grid"></div>
 
   <script>
-  const BACKEND_URL = 'https://cake-pop-bot.onrender.com'; 
+  const BACKEND_URL = 'https://cake-pop-bot.onrender.com';
 
-  // Выносим инициализацию внутрь события загрузки страницы
-  document.addEventListener('DOMContentLoaded', () => {
-    const tg = window.Telegram?.WebApp;
-    if (tg) {
+  // 1. Безопасная инициализация Telegram
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    try {
       tg.ready();
       tg.expand();
+    } catch (e) {
+      console.log('Telegram WebApp не найден, запуск в браузере');
     }
+  }
 
-    const user = tg?.initDataUnsafe?.user;
-    // Если открываем из Telegram — берем реальный ID, если с ПК — тестовый
-    window.telegramId = user ? user.id : 123456789;
-
-    renderEmptyGrid();
-    fetchUserBalance(); // Вызываем загрузку баланса!
-  });
+  // 2. Безопасное получение telegramId
+  const user = tg?.initDataUnsafe?.user;
+  const telegramId = user ? user.id : 123456789;
 
   const GRID_SIZE = 25;
   let mineIndices = new Set();
@@ -124,25 +123,28 @@
   let currentBet = 50;
   let balance = 0;
 
+  // 3. Загрузка баланса из Supabase
   async function fetchUserBalance() {
-  try {
-    const currentId = window.telegramId || 123456789;
-    const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${currentId}`);
-    const data = await response.json();
-    
-    if (data.balance !== undefined) {
-      balance = Number(data.balance);
-      updateBalanceDisplay();
-    } else {
-      console.warn('Сервер не вернул баланс:', data);
-    }
-  } catch (err) {
-    console.error('Ошибка при загрузке баланса из БД:', err);
-  }
-}
+    try {
+      console.log('Отправляем запрос баланса для ID:', telegramId);
+      const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
+      const data = await response.json();
 
+      if (data.balance !== undefined) {
+        balance = Number(data.balance);
+        updateBalanceDisplay();
+      } else {
+        console.warn('Сервер не вернул баланс:', data);
+      }
+    } catch (err) {
+      console.error('Ошибка при загрузке баланса из БД:', err);
+    }
+  }
+
+  // 4. Отправка выигрыша/списания в Supabase
   async function syncBalance(changeAmount) {
     try {
+      console.log('Отправляем изменение баланса:', changeAmount);
       const response = await fetch(`${BACKEND_URL}/api/game-result`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,7 +170,7 @@
 
   async function addBonus() {
     await syncBalance(500);
-    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
   }
 
   function calculateMultiplier(mines, gems) {
@@ -190,6 +192,7 @@
 
   function renderEmptyGrid() {
     const grid = document.getElementById('grid');
+    if (!grid) return;
     grid.innerHTML = '';
     for (let i = 0; i < GRID_SIZE; i++) {
       const cell = document.createElement('div');
@@ -214,8 +217,7 @@
     await syncBalance(-currentBet);
 
     const minesCount = parseInt(document.getElementById('minesCount').value);
-    
-    // Проверка на 3 в ряд работает только если выбрано ровно 3 мины
+
     function hasThreeInARow(set) {
       if (set.size !== 3) return false;
       const sorted = Array.from(set).sort((a, b) => a - b);
@@ -292,7 +294,7 @@
       const mainBtn = document.getElementById('mainBtn');
       mainBtn.innerText = `ЗАБРАТЬ (${winTotal} $CAKE)`;
 
-      if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
     }
   }
 
@@ -309,7 +311,7 @@
     
     mineIndices.forEach(mIndex => {
       const mCell = document.getElementById('grid').children[mIndex];
-      if (!mCell.dataset.revealed) {
+      if (mCell && !mCell.dataset.revealed) {
         mCell.innerText = "❌";
         mCell.classList.add('revealed-bomb');
       }
@@ -323,15 +325,17 @@
     document.getElementById('minesCount').disabled = false;
 
     if (isWin) {
-      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } else {
-      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
     }
   }
 
-  // Первичная инициализация при открытии
-  renderEmptyGrid();
-  fetchUserBalance();
-  </script>
+  // 5. ГАРАНТИРОВАННЫЙ ЗАПУСК ПОСЛЕ ЗАГРУЗКИ DOM
+  document.addEventListener('DOMContentLoaded', () => {
+    renderEmptyGrid();
+    fetchUserBalance();
+  });
+</script>
 </body>
 </html>
