@@ -2,6 +2,7 @@ const { Telegraf, Markup } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 require('dotenv').config();
 
 // ==========================================
@@ -11,15 +12,64 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// ==========================================
-// 2. ИНИЦИАЛИЗАЦИЯ TELEGRAM БОТА
-// ==========================================
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://cake-pop-nine.vercel.app';
+// Хранилище активных сессий игр на сервере: telegram_id => { mines, bet, revealedCount, minesCount, isGameOver }
+const activeGames = new Map();
 
-// Вспомогательная функция: Получить или создать юзера в БД
+// ==========================================
+// 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ
+// ==========================================
+
+// Валидация подписи Telegram initData
+function verifyTelegramWebAppData(telegramInitData) {
+  if (!telegramInitData) return null;
+
+  try {
+    const urlParams = new URLSearchParams(telegramInitData);
+    const hash = urlParams.get('hash');
+    if (!hash) return null;
+
+    urlParams.delete('hash');
+
+    const paramsData = Array.from(urlParams.entries())
+      .map(([key, value]) => `${key}=${value}`)
+      .sort()
+      .join('\n');
+
+    const secretKey = crypto
+      .createHmac('sha256', 'WebAppData')
+      .update(process.env.8913651056:AAHf0TiSLkvr48Z3ZbOx49B97jEpFyDa0oI)
+      .digest();
+
+    const calculatedHash = crypto
+      .createHmac('sha256', secretKey)
+      .update(paramsData)
+      .digest('hex');
+
+    if (calculatedHash === hash) {
+      const userStr = urlParams.get('user');
+      return userStr ? JSON.parse(userStr) : null;
+    }
+    return null;
+  } catch (e) {
+    console.error('Ошибка валидации initData:', e);
+    return null;
+  }
+}
+
+// Расчет множителя
+function calculateServerMultiplier(mines, gems) {
+  if (gems === 0) return 1.00;
+  let prob = 1.0;
+  for (let i = 0; i < gems; i++) {
+    prob *= (25 - mines - i) / (25 - i);
+  }
+  let mult = (0.98 / prob) * 0.95;
+  return Number(Math.min(mult, 100).toFixed(2));
+}
+
+// Получить или создать юзера в БД
 async function getOrCreateUser(telegramId, username = 'Gamer') {
-  let { data: existingUser, error: selectError } = await supabase
+  let { data: existingUser } = await supabase
     .from('users')
     .select('*')
     .eq('telegram_id', telegramId)
@@ -28,13 +78,7 @@ async function getOrCreateUser(telegramId, username = 'Gamer') {
   if (!existingUser) {
     const { data: newUser, error: insertError } = await supabase
       .from('users')
-      .insert([
-        { 
-          telegram_id: telegramId, 
-          username: username, 
-          balance: 1000.00 
-        }
-      ])
+      .insert([{ telegram_id: telegramId, username: username, balance: 1000.00 }])
       .select()
       .single();
 
@@ -42,12 +86,17 @@ async function getOrCreateUser(telegramId, username = 'Gamer') {
       console.error('Ошибка создания юзера в Supabase:', insertError);
       return null;
     }
-    console.log(`✨ Новый игрок зарегистрирован в БД: ${username} (${telegramId})`);
     return newUser;
   }
 
   return existingUser;
 }
+
+// ==========================================
+// 3. ИНИЦИАЛИЗАЦИЯ TELEGRAM БОТА
+// ==========================================
+const bot = new Telegraf(process.env.BOT_TOKEN);
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://cake-pop-nine.vercel.app';
 
 bot.start(async (ctx) => {
   const user = ctx.from;
@@ -78,108 +127,180 @@ bot.start(async (ctx) => {
   }
 });
 
-// Запуск бота
 bot.launch().then(() => {
-  console.log('🚀 Бот Cake Pop успешно запущен и работает!');
+  console.log('🚀 Бот Cake Pop успешно запущен!');
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 // ==========================================
-// 3. ИНИЦИАЛИЗАЦИЯ EXPRESS СЕРВЕРА С ЭНДПОИНТАМИ
+// 4. EXPRESS API СЕРВЕР
 // ==========================================
 const app = express();
-
-// Настройка CORS (разрешаем WebApp с Vercel общаться с Render)
 app.use(cors());
 app.use(express.json());
 
-// ЭНДПОИНТ #1: Получение пользователя и его баланса
+// 1. Получение баланса
 app.get('/api/user', async (req, res) => {
   const telegramId = req.query.telegram_id;
-
-  if (!telegramId) {
-    return res.status(400).json({ error: 'telegram_id обязателен' });
-  }
+  if (!telegramId) return res.status(400).json({ error: 'telegram_id обязателен' });
 
   try {
-    // Получаем юзера или создаем его (если зашли впервые или тестируем)
     const user = await getOrCreateUser(telegramId);
+    if (!user) return res.status(500).json({ error: 'Ошибка БД' });
 
-    if (!user) {
-      return res.status(500).json({ error: 'Не удалось получить данные пользователя' });
-    }
-
-    return res.json({
-      telegram_id: user.telegram_id,
-      username: user.username,
-      balance: user.balance
-    });
+    return res.json({ telegram_id: user.telegram_id, username: user.username, balance: user.balance });
   } catch (err) {
-    console.error('Ошибка в GET /api/user:', err);
-    return res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+    return res.status(500).json({ error: 'Серверная ошибка' });
   }
 });
 
-// ЭНДПОИНТ #2: Изменение баланса по результату игры
-app.post('/api/game-result', async (req, res) => {
-  const { telegram_id, change_amount } = req.body;
+// 2. СТАРТ ИГРЫ (Атомарное списание + Генерация мин на бэкенде)
+app.post('/api/game/start', async (req, res) => {
+  const { initData, betAmount, minesCount } = req.body;
+  const tgUser = verifyTelegramWebAppData(initData);
 
-  if (!telegram_id || change_amount === undefined || isNaN(change_amount)) {
-    return res.status(400).json({ error: 'Неверные параметры запроса' });
-  }
+  // Резервный вариант для локальных тестов в обычном браузере
+  const telegramId = tgUser ? tgUser.id : req.body.fallback_telegram_id || 123456789;
 
   try {
-    // 1. Получаем юзера (или создаём, если не существует)
+    const user = await getOrCreateUser(telegramId);
+    if (!user || user.balance < betAmount) {
+      return res.status(400).json({ error: 'Недостаточно средств!' });
+    }
+
+    const newBalance = user.balance - betAmount;
+
+    // Списываем ставку
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ balance: newBalance })
+      .eq('telegram_id', telegramId);
+
+    if (updateError) return res.status(500).json({ error: 'Ошибка списания баланса' });
+
+    // Генерация мин СТРОГО НА СЕРВЕРЕ
+    const mineIndices = new Set();
+    while (mineIndices.size < Number(minesCount)) {
+      mineIndices.add(Math.floor(Math.random() * 25));
+    }
+
+    // Сохраняем активную сессию
+    activeGames.set(String(telegramId), {
+      mines: mineIndices,
+      bet: Number(betAmount),
+      revealedCount: 0,
+      minesCount: Number(minesCount),
+      isGameOver: false
+    });
+
+    console.log(`🎮 Игра начата [ID: ${telegramId}]. Списано: ${betAmount}. Мины сгенерированы.`);
+    return res.json({ success: true, balance: newBalance });
+
+  } catch (err) {
+    console.error('Ошибка в /api/game/start:', err);
+    return res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// 3. ОТКРЫТИЕ ЯЧЕЙКИ (Проверка попадания)
+app.post('/api/game/open-cell', async (req, res) => {
+  const { initData, cellIndex } = req.body;
+  const tgUser = verifyTelegramWebAppData(initData);
+  const telegramId = tgUser ? tgUser.id : req.body.fallback_telegram_id || 123456789;
+
+  const game = activeGames.get(String(telegramId));
+  if (!game || game.isGameOver) {
+    return res.status(400).json({ error: 'Нет активной игры' });
+  }
+
+  // Если попал на мину
+  if (game.mines.has(Number(cellIndex))) {
+    game.isGameOver = true;
+    const allMines = Array.from(game.mines);
+    activeGames.delete(String(telegramId));
+
+    return res.json({ hitMine: true, mines: allMines });
+  }
+
+  // Успешный клик
+  game.revealedCount++;
+  const multiplier = calculateServerMultiplier(game.minesCount, game.revealedCount);
+  const currentProfit = Math.floor(game.bet * multiplier);
+
+  return res.json({
+    hitMine: false,
+    multiplier: multiplier,
+    profit: currentProfit
+  });
+});
+
+// 4. ЗАБРАТЬ ВЫИГРЫШ (Кэшаут)
+app.post('/api/game/cashout', async (req, res) => {
+  const { initData } = req.body;
+  const tgUser = verifyTelegramWebAppData(initData);
+  const telegramId = tgUser ? tgUser.id : req.body.fallback_telegram_id || 123456789;
+
+  const game = activeGames.get(String(telegramId));
+  if (!game || game.isGameOver) {
+    return res.status(400).json({ error: 'Активная игра не найдена' });
+  }
+
+  const multiplier = calculateServerMultiplier(game.minesCount, game.revealedCount);
+  const winTotal = Math.floor(game.bet * multiplier);
+
+  try {
+    const user = await getOrCreateUser(telegramId);
+    const updatedBalance = Number(user.balance) + winTotal;
+
+    await supabase
+      .from('users')
+      .update({ balance: updatedBalance })
+      .eq('telegram_id', telegramId);
+
+    const allMines = Array.from(game.mines);
+    activeGames.delete(String(telegramId));
+
+    console.log(`🏆 Выигрыш забрали [ID: ${telegramId}]: +${winTotal}. Баланс: ${updatedBalance}`);
+
+    return res.json({
+      success: true,
+      balance: updatedBalance,
+      winAmount: winTotal,
+      mines: allMines
+    });
+  } catch (err) {
+    console.error('Ошибка в /api/game/cashout:', err);
+    return res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Начисление бесплатного бонуса
+app.post('/api/bonus', async (req, res) => {
+  const { telegram_id } = req.body;
+  if (!telegram_id) return res.status(400).json({ error: 'Без ID нельзя' });
+
+  try {
     const user = await getOrCreateUser(telegram_id);
+    const newBalance = Number(user.balance) + 500;
 
-    if (!user) {
-      return res.status(404).json({ error: 'Пользователь не найден' });
-    }
-
-    // 2. Рассчитываем новый баланс
-    const currentBalance = Number(user.balance);
-    const amount = Number(change_amount);
-    const newBalance = currentBalance + amount;
-
-    // Защита от ухода баланса в минус
-    if (newBalance < 0) {
-      return res.status(400).json({ error: 'Недостаточно средств на балансе' });
-    }
-
-    // 3. Сохраняем новый баланс в Supabase
-    const { data: updatedUser, error: updateError } = await supabase
+    const { data: updated } = await supabase
       .from('users')
       .update({ balance: newBalance })
       .eq('telegram_id', telegram_id)
       .select()
       .single();
 
-    if (updateError) {
-      console.error('Ошибка обновления баланса в Supabase:', updateError);
-      return res.status(500).json({ error: 'Не удалось обновить баланс' });
-    }
-
-    console.log(`💰 Баланс ${telegram_id} изменен на ${amount}. Новый баланс: ${updatedUser.balance}`);
-
-    return res.json({
-      success: true,
-      balance: updatedUser.balance
-    });
-
+    return res.json({ success: true, balance: updated.balance });
   } catch (err) {
-    console.error('Ошибка в POST /api/game-result:', err);
-    return res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+    return res.status(500).json({ error: 'Ошибка бонуса' });
   }
 });
 
-// Пинг для UptimeRobot
-app.get('/', (req, res) => {
-  res.send('Cake Pop Bot & API are alive!');
-});
+app.get('/', (req, res) => res.send('Cake Pop Secure Backend Active!'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🌐 Express API сервер слушает порт ${PORT}`);
+  console.log(`🌐 API сервер запущен на порту ${PORT}`);
 });
