@@ -124,8 +124,9 @@
   let balance = 0;
 
   // 3. Загрузка баланса из Supabase
-  async function fetchUserBalance() {
-    try {
+ async function fetchUserBalance() {
+  alert("Текущий telegramId: " + telegramId); 
+  try {
       console.log('Отправляем запрос баланса для ID:', telegramId);
       const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
       const data = await response.json();
