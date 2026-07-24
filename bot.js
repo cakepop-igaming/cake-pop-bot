@@ -37,7 +37,7 @@ function verifyTelegramWebAppData(telegramInitData) {
 
     const secretKey = crypto
       .createHmac('sha256', 'WebAppData')
-      .update(process.env.8913651056:AAHf0TiSLkvr48Z3ZbOx49B97jEpFyDa0oI)
+      .update(process.env.BOT_TOKEN)
       .digest();
 
     const calculatedHash = crypto
