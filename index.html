@@ -100,12 +100,21 @@
   <script>
   const BACKEND_URL = 'https://cake-pop-bot.onrender.com'; 
 
-  const tg = window.Telegram.WebApp;
-  tg.ready();
-  tg.expand();
+  // Выносим инициализацию внутрь события загрузки страницы
+  document.addEventListener('DOMContentLoaded', () => {
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
 
-  const user = tg.initDataUnsafe?.user;
-  const telegramId = user ? user.id : 123456789;
+    const user = tg?.initDataUnsafe?.user;
+    // Если открываем из Telegram — берем реальный ID, если с ПК — тестовый
+    window.telegramId = user ? user.id : 123456789;
+
+    renderEmptyGrid();
+    fetchUserBalance(); // Вызываем загрузку баланса!
+  });
 
   const GRID_SIZE = 25;
   let mineIndices = new Set();
@@ -116,20 +125,21 @@
   let balance = 0;
 
   async function fetchUserBalance() {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${telegramId}`);
-      const data = await response.json();
-      
-      if (data.balance !== undefined) {
-        balance = Number(data.balance);
-        updateBalanceDisplay();
-      } else {
-        console.warn('Сервер не вернул баланс:', data);
-      }
-    } catch (err) {
-      console.error('Ошибка при загрузке баланса из БД:', err);
+  try {
+    const currentId = window.telegramId || 123456789;
+    const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${currentId}`);
+    const data = await response.json();
+    
+    if (data.balance !== undefined) {
+      balance = Number(data.balance);
+      updateBalanceDisplay();
+    } else {
+      console.warn('Сервер не вернул баланс:', data);
     }
+  } catch (err) {
+    console.error('Ошибка при загрузке баланса из БД:', err);
   }
+}
 
   async function syncBalance(changeAmount) {
     try {
