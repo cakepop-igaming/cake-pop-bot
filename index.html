@@ -4,251 +4,358 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Cake Pop</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      user-select: none;
+    }
+    body {
+      background: #121318;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .header {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      background: #1e2029;
+      padding: 12px 16px;
+      border-radius: 14px;
+    }
+    .balance-box {
+      font-weight: bold;
+      color: #ffb703;
+      font-size: 18px;
+    }
+    .stats-card {
+      width: 100%;
+      max-width: 400px;
+      background: #1e2029;
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .grid {
+      width: 100%;
+      max-width: 400px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .cell {
+      aspect-ratio: 1;
+      background: #2a2d3d;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+    }
+    .cell:active {
+      transform: scale(0.95);
+    }
+    .cell.revealed-gem {
+      background: #2b4c3f;
+    }
+    .cell.revealed-bomb {
+      background: #4c2b2b;
+    }
+    .controls {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+    }
+    .input-field {
+      flex: 1;
+      background: #1e2029;
+      border: 1px solid #333647;
+      border-radius: 10px;
+      padding: 10px;
+      color: #fff;
+      font-size: 14px;
+    }
+    .btn-main {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      background: #0088cc;
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-main.cashout {
+      background: #2ec4b6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <span>🍰 Cake Pop</span>
+    <div class="balance-box"><span id="balanceText">0</span> $CAKE</div>
+  </div>
+
+  <div class="stats-card">
+    <div>Множитель: <strong id="currentMult">1.00x</strong></div>
+    <div>Профит: <strong id="profitText" style="color:#2ec4b6">0 $CAKE</strong></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="controls">
+    <div class="input-group">
+      <input type="number" id="betAmount" class="input-field" value="50" placeholder="Ставка">
+      <select id="minesCount" class="input-field">
+        <option value="3">3 мины</option>
+        <option value="5" selected>5 мин</option>
+        <option value="10">10 мин</option>
+      </select>
+    </div>
+    <button id="mainBtn" class="btn-main" onclick="handleMainAction()">СТАРТ</button>
+  </div>
+
   <script>
-  const BACKEND_URL = 'https://cake-pop-bot.onrender.com';
+    const BACKEND_URL = 'https://cake-pop-bot.onrender.com';
 
-  const tg = window.Telegram?.WebApp;
-  if (tg) {
-    try {
-      tg.ready();
-      tg.expand();
-    } catch (e) {}
-  }
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      try {
+        tg.ready();
+        tg.expand();
+      } catch (e) {}
+    }
 
-  // Получаем initData для подписи или fallback ID для браузера
-  const initData = tg?.initData || '';
-  const user = tg?.initDataUnsafe?.user;
-  const fallbackTelegramId = user ? user.id : 123456789;
+    const initData = tg?.initData || '';
+    const user = tg?.initDataUnsafe?.user;
+    const fallbackTelegramId = user ? user.id : 123456789;
 
-  const GRID_SIZE = 25;
-  let revealedCount = 0;
-  let gameOver = true;
-  let currentMultiplier = 1.00;
-  let currentBet = 50;
-  let balance = 0;
+    const GRID_SIZE = 25;
+    let gameOver = true;
+    let currentMultiplier = 1.00;
+    let currentBet = 50;
+    let balance = 0;
 
-  function updateBalanceDisplay() {
-    const el = document.getElementById('balanceText');
-    if (el) el.innerText = Math.floor(balance);
-  }
+    function updateBalanceDisplay() {
+      const el = document.getElementById('balanceText');
+      if (el) el.innerText = Math.floor(balance);
+    }
 
-  // Загрузка баланса из Supabase при запуске
-  async function fetchUserBalance() {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${fallbackTelegramId}`);
-      const data = await response.json();
-      if (data.balance !== undefined) {
-        balance = Number(data.balance);
-        updateBalanceDisplay();
+    async function fetchUserBalance() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/user?telegram_id=${fallbackTelegramId}`);
+        const data = await response.json();
+        if (data.balance !== undefined) {
+          balance = Number(data.balance);
+          updateBalanceDisplay();
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки баланса:', err);
       }
-    } catch (err) {
-      console.error('Ошибка загрузки баланса:', err);
-    }
-  }
-
-  // 1. СТАРТ ИГРЫ (Отправляем на сервер)
-  async function startGame() {
-    const betInput = document.getElementById('betAmount');
-    currentBet = parseFloat(betInput.value);
-    const minesCount = parseInt(document.getElementById('minesCount').value);
-
-    if (isNaN(currentBet) || currentBet <= 0) {
-      alert("Введите корректную ставку!");
-      return;
-    }
-    if (currentBet > balance) {
-      alert("Недостаточно $CAKE на балансе!");
-      return;
     }
 
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/game/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          initData: initData,
-          fallback_telegram_id: fallbackTelegramId,
-          betAmount: currentBet,
-          minesCount: minesCount
-        })
-      });
+    async function startGame() {
+      const betInput = document.getElementById('betAmount');
+      currentBet = parseFloat(betInput.value);
+      const minesCount = parseInt(document.getElementById('minesCount').value);
 
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        alert(data.error || "Ошибка старта игры");
+      if (isNaN(currentBet) || currentBet <= 0) {
+        alert("Введите корректную ставку!");
+        return;
+      }
+      if (currentBet > balance) {
+        alert("Недостаточно $CAKE на балансе!");
         return;
       }
 
-      // Обновляем баланс, списанный сервером
-      balance = Number(data.balance);
-      updateBalanceDisplay();
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/game/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            initData: initData,
+            fallback_telegram_id: fallbackTelegramId,
+            betAmount: currentBet,
+            minesCount: minesCount
+          })
+        });
 
-      revealedCount = 0;
-      gameOver = false;
-      currentMultiplier = 1.00;
+        const data = await response.json();
 
-      document.getElementById('betAmount').disabled = true;
-      document.getElementById('minesCount').disabled = true;
-      document.getElementById('currentMult').innerText = '1.00x';
-      document.getElementById('profitText').innerText = '0 $CAKE';
+        if (!response.ok || data.error) {
+          alert(data.error || "Ошибка старта игры");
+          return;
+        }
+
+        balance = Number(data.balance);
+        updateBalanceDisplay();
+
+        gameOver = false;
+        currentMultiplier = 1.00;
+
+        document.getElementById('betAmount').disabled = true;
+        document.getElementById('minesCount').disabled = true;
+        document.getElementById('currentMult').innerText = '1.00x';
+        document.getElementById('profitText').innerText = '0 $CAKE';
+        
+        const mainBtn = document.getElementById('mainBtn');
+        mainBtn.innerText = "ЗАБРАТЬ (0 $CAKE)";
+        mainBtn.classList.add('cashout');
+
+        const grid = document.getElementById('grid');
+        grid.innerHTML = '';
+        for (let i = 0; i < GRID_SIZE; i++) {
+          const cell = document.createElement('div');
+          cell.classList.add('cell');
+          cell.addEventListener('click', () => handleCellClick(cell, i));
+          grid.appendChild(cell);
+        }
+
+      } catch (err) {
+        console.error('Ошибка старта:', err);
+      }
+    }
+
+    async function handleCellClick(cell, index) {
+      if (gameOver || cell.dataset.revealed) return;
+      cell.dataset.revealed = "true";
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/game/open-cell`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            initData: initData,
+            fallback_telegram_id: fallbackTelegramId,
+            cellIndex: index
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.hitMine) {
+          cell.innerText = "❌";
+          cell.classList.add('revealed-bomb');
+          endGame(false, data.mines);
+        } else {
+          cell.innerText = "🧁";
+          cell.classList.add('revealed-gem');
+          
+          currentMultiplier = data.multiplier;
+          const winTotal = data.profit;
+
+          document.getElementById('currentMult').innerText = currentMultiplier + 'x';
+          document.getElementById('profitText').innerText = `+${winTotal} $CAKE`;
+          
+          const mainBtn = document.getElementById('mainBtn');
+          mainBtn.innerText = `ЗАБРАТЬ (${winTotal} $CAKE)`;
+
+          if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+        }
+
+      } catch (err) {
+        console.error('Ошибка открытия ячейки:', err);
+      }
+    }
+
+    async function cashOut() {
+      if (gameOver) return;
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/game/cashout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            initData: initData,
+            fallback_telegram_id: fallbackTelegramId
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          balance = Number(data.balance);
+          updateBalanceDisplay();
+          endGame(true, data.mines);
+        }
+      } catch (err) {
+        console.error('Ошибка кэшаута:', err);
+      }
+    }
+
+    function endGame(isWin, minesList = []) {
+      gameOver = true;
       
-      const mainBtn = document.getElementById('mainBtn');
-      mainBtn.innerText = "ЗАБРАТЬ (0 $CAKE)";
-      mainBtn.classList.add('cashout');
+      if (minesList.length > 0) {
+        const grid = document.getElementById('grid');
+        minesList.forEach(mIndex => {
+          const mCell = grid.children[mIndex];
+          if (mCell && !mCell.dataset.revealed) {
+            mCell.innerText = "❌";
+            mCell.classList.add('revealed-bomb');
+          }
+        });
+      }
 
-      // Рисуем сетку
+      const mainBtn = document.getElementById('mainBtn');
+      mainBtn.classList.remove('cashout');
+      mainBtn.innerText = "НОВАЯ ИГРА";
+
+      document.getElementById('betAmount').disabled = false;
+      document.getElementById('minesCount').disabled = false;
+
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred(isWin ? 'success' : 'error');
+      }
+    }
+
+    function handleMainAction() {
+      if (gameOver) {
+        startGame();
+      } else {
+        cashOut();
+      }
+    }
+
+    function renderEmptyGrid() {
       const grid = document.getElementById('grid');
+      if (!grid) return;
       grid.innerHTML = '';
       for (let i = 0; i < GRID_SIZE; i++) {
         const cell = document.createElement('div');
         cell.classList.add('cell');
-        cell.addEventListener('click', () => handleCellClick(cell, i));
         grid.appendChild(cell);
       }
-
-    } catch (err) {
-      console.error('Ошибка старта:', err);
-    }
-  }
-
-  // 2. КЛИК ПО ЯЧЕЙКЕ (Проверка на сервере)
-  async function handleCellClick(cell, index) {
-    if (gameOver || cell.dataset.revealed) return;
-    cell.dataset.revealed = "true";
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/game/open-cell`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          initData: initData,
-          fallback_telegram_id: fallbackTelegramId,
-          cellIndex: index
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.hitMine) {
-        // Попал на мину
-        cell.innerText = "❌";
-        cell.classList.add('revealed-bomb');
-        endGame(false, data.mines);
-      } else {
-        // Безопасная ячейка
-        cell.innerText = "🧁";
-        cell.classList.add('revealed-gem');
-        
-        currentMultiplier = data.multiplier;
-        const winTotal = data.profit;
-
-        document.getElementById('currentMult').innerText = currentMultiplier + 'x';
-        document.getElementById('profitText').innerText = `+${winTotal} $CAKE`;
-        
-        const mainBtn = document.getElementById('mainBtn');
-        mainBtn.innerText = `ЗАБРАТЬ (${winTotal} $CAKE)`;
-
-        if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-      }
-
-    } catch (err) {
-      console.error('Ошибка открытия ячейки:', err);
-    }
-  }
-
-  // 3. ЗАБРАТЬ ВЫИГРЫШ (Кэшаут)
-  async function cashOut() {
-    if (gameOver) return;
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/game/cashout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          initData: initData,
-          fallback_telegram_id: fallbackTelegramId
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        balance = Number(data.balance);
-        updateBalanceDisplay();
-        endGame(true, data.mines);
-      }
-    } catch (err) {
-      console.error('Ошибка кэшаута:', err);
-    }
-  }
-
-  function endGame(isWin, minesList = []) {
-    gameOver = true;
-    
-    // Раскрываем все мины, полученные от сервера
-    if (minesList.length > 0) {
-      const grid = document.getElementById('grid');
-      minesList.forEach(mIndex => {
-        const mCell = grid.children[mIndex];
-        if (mCell && !mCell.dataset.revealed) {
-          mCell.innerText = "❌";
-          mCell.classList.add('revealed-bomb');
-        }
-      });
     }
 
-    const mainBtn = document.getElementById('mainBtn');
-    mainBtn.classList.remove('cashout');
-    mainBtn.innerText = "НОВАЯ ИГРА";
-
-    document.getElementById('betAmount').disabled = false;
-    document.getElementById('minesCount').disabled = false;
-
-    if (tg?.HapticFeedback) {
-      tg.HapticFeedback.notificationOccurred(isWin ? 'success' : 'error');
-    }
-  }
-
-  function handleMainAction() {
-    if (gameOver) {
-      startGame();
-    } else {
-      cashOut();
-    }
-  }
-
-  function renderEmptyGrid() {
-    const grid = document.getElementById('grid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    for (let i = 0; i < GRID_SIZE; i++) {
-      const cell = document.createElement('div');
-      cell.classList.add('cell');
-      grid.appendChild(cell);
-    }
-  }
-
-  // Кнопка теста бонуса +500
-  async function addBonus() {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/bonus`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegram_id: fallbackTelegramId })
-      });
-      const data = await res.json();
-      if (data.success) {
-        balance = Number(data.balance);
-        updateBalanceDisplay();
-      }
-    } catch (e) {}
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    renderEmptyGrid();
-    fetchUserBalance();
-  });
-</script>
+    document.addEventListener('DOMContentLoaded', () => {
+      renderEmptyGrid();
+      fetchUserBalance();
+    });
+  </script>
 </body>
 </html>
