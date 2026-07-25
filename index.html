@@ -15,7 +15,7 @@
     }
 
     body {
-      background: #0f111a;
+      background: #09080e;
       color: #ffffff;
       display: flex;
       flex-direction: column;
@@ -24,57 +24,60 @@
       padding: 16px;
     }
 
+    /* Заголовок в стиле референса: стильный, мягкий, без кислотного неона */
     .title-logo {
-      font-size: 24px;
-      font-weight: 900;
-      color: #ff66c4;
-      text-shadow: 0 0 12px rgba(255, 102, 196, 0.6);
-      margin-bottom: 16px;
+      font-size: 22px;
+      font-weight: 800;
+      color: #e2e8f0;
+      margin-bottom: 18px;
       display: flex;
       align-items: center;
       gap: 8px;
+      letter-spacing: -0.3px;
     }
 
-    /* Баланс-бар */
+    /* Баланс-бар с глухим премиум-покрытием */
     .balance-card {
       width: 100%;
       max-width: 380px;
-      background: #181b26;
-      border: 1px solid #282c3f;
-      border-radius: 16px;
-      padding: 10px 16px;
+      background: rgba(22, 19, 36, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      border-radius: 18px;
+      padding: 12px 18px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .balance-text {
-      font-size: 15px;
-      font-weight: 700;
-      color: #a0a5ba;
+      font-size: 14px;
+      font-weight: 600;
+      color: #94a3b8;
     }
 
     .balance-val {
-      color: #ffcc00;
-      font-size: 18px;
+      color: #fbbf24;
+      font-weight: 800;
+      font-size: 17px;
     }
 
     .btn-bonus {
-      background: #2a52be;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
       color: #fff;
       border: none;
-      padding: 8px 12px;
-      border-radius: 10px;
-      font-weight: bold;
+      padding: 8px 14px;
+      border-radius: 12px;
+      font-weight: 700;
       font-size: 13px;
       cursor: pointer;
-      box-shadow: 0 4px 10px rgba(42, 82, 190, 0.4);
-      transition: transform 0.1s;
+      transition: transform 0.1s, opacity 0.2s;
+      box-shadow: 0 4px 12px rgba(29, 78, 216, 0.25);
     }
 
     .btn-bonus:active {
-      transform: scale(0.95);
+      transform: scale(0.96);
     }
 
     /* Настройки ставки */
@@ -84,49 +87,49 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .input-box {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
     }
 
     .input-box label {
       font-size: 11px;
-      font-weight: 800;
-      color: #6c728e;
+      font-weight: 700;
+      color: #64748b;
       letter-spacing: 0.5px;
     }
 
     .input-box input, .input-box select {
-      background: #181b26;
-      border: 1px solid #282c3f;
-      border-radius: 12px;
+      background: rgba(22, 19, 36, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
       padding: 12px;
-      color: #fff;
-      font-size: 16px;
-      font-weight: bold;
+      color: #f1f5f9;
+      font-size: 15px;
+      font-weight: 700;
       outline: none;
     }
 
-    /* Главная кнопка */
+    /* Главная кнопка: сдержанный премиум градиент в стиле Spin Again */
     .btn-action {
       width: 100%;
       max-width: 380px;
-      padding: 18px;
-      border: none;
-      border-radius: 18px;
-      background: #ff3399;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      background: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #6366f1 100%);
       color: #ffffff;
-      font-size: 18px;
-      font-weight: 900;
-      letter-spacing: 1px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
       cursor: pointer;
-      box-shadow: 0 6px 20px rgba(255, 51, 153, 0.4);
       margin-bottom: 16px;
-      transition: transform 0.1s, background 0.2s;
+      transition: transform 0.1s, opacity 0.2s;
+      box-shadow: 0 8px 24px rgba(168, 85, 247, 0.2);
     }
 
     .btn-action:active {
@@ -134,8 +137,9 @@
     }
 
     .btn-action.cashout {
-      background: #00d285;
-      box-shadow: 0 6px 20px rgba(0, 210, 133, 0.4);
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+      border-color: rgba(16, 185, 129, 0.3);
     }
 
     /* Статы раунда */
@@ -144,21 +148,23 @@
       max-width: 380px;
       display: flex;
       justify-content: space-between;
-      font-size: 15px;
-      font-weight: 700;
-      color: #a0a5ba;
+      font-size: 14px;
+      font-weight: 600;
+      color: #94a3b8;
       margin-bottom: 14px;
     }
 
     .stat-val {
-      color: #00e5ff;
+      color: #38bdf8;
+      font-weight: 700;
     }
 
     .stat-profit {
-      color: #00d285;
+      color: #34d399;
+      font-weight: 700;
     }
 
-    /* Игровое поле */
+    /* Игровое поле: глухой фиолетовый фон и обрамления */
     .grid {
       width: 100%;
       max-width: 380px;
@@ -169,37 +175,34 @@
 
     .cell {
       aspect-ratio: 1;
-      background: #251b4e;
-      border: 2px solid #3d2b80;
+      background: #171328;
+      border: 2px solid #332654;
       border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 26px;
+      font-size: 24px;
       cursor: pointer;
       transition: transform 0.1s, background 0.2s, border-color 0.2s;
-      box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.05);
     }
 
     .cell:active {
-      transform: scale(0.92);
+      transform: scale(0.93);
     }
 
     .cell.loading {
-      opacity: 0.6;
-      border-color: #00e5ff;
+      opacity: 0.5;
+      border-color: #a855f7;
     }
 
     .cell.revealed-gem {
-      background: #1c2b4a;
-      border-color: #00e5ff;
-      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+      background: #122822;
+      border-color: #10b981;
     }
 
     .cell.revealed-bomb {
-      background: #4a1c24;
-      border-color: #ff3355;
-      box-shadow: 0 0 12px rgba(255, 51, 85, 0.4);
+      background: #2d141e;
+      border-color: #f43f5e;
     }
   </style>
 </head>
@@ -218,7 +221,7 @@
       <input type="number" id="betAmount" value="50">
     </div>
     <div class="input-box">
-      <label>ЛОУШКИ</label>
+      <label>ЛОВУШКИ</label>
       <select id="minesCount">
         <option value="3">3</option>
         <option value="5" selected>5</option>
@@ -328,7 +331,6 @@
     async function handleCellClick(cell, index) {
       if (gameOver || cell.dataset.revealed || cell.dataset.loading) return;
 
-      // Optimistic UI: даем отклик сразу
       cell.dataset.loading = "true";
       cell.classList.add('loading');
       if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
