@@ -13,131 +13,228 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       user-select: none;
     }
+
     body {
-      background: #121318;
-      color: #fff;
+      background: #0f111a;
+      color: #ffffff;
       display: flex;
       flex-direction: column;
       align-items: center;
       min-height: 100vh;
       padding: 16px;
     }
-    .header {
+
+    .title-logo {
+      font-size: 24px;
+      font-weight: 900;
+      color: #ff66c4;
+      text-shadow: 0 0 12px rgba(255, 102, 196, 0.6);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Баланс-бар */
+    .balance-card {
       width: 100%;
-      max-width: 400px;
+      max-width: 380px;
+      background: #181b26;
+      border: 1px solid #282c3f;
+      border-radius: 16px;
+      padding: 10px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 16px;
-      background: #1e2029;
-      padding: 12px 16px;
-      border-radius: 14px;
     }
-    .balance-box {
-      font-weight: bold;
-      color: #ffb703;
+
+    .balance-text {
+      font-size: 15px;
+      font-weight: 700;
+      color: #a0a5ba;
+    }
+
+    .balance-val {
+      color: #ffcc00;
       font-size: 18px;
     }
-    .stats-card {
-      width: 100%;
-      max-width: 400px;
-      background: #1e2029;
-      border-radius: 14px;
-      padding: 12px 16px;
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
-    .grid {
-      width: 100%;
-      max-width: 400px;
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-      margin-bottom: 20px;
-    }
-    .cell {
-      aspect-ratio: 1;
-      background: #2a2d3d;
+
+    .btn-bonus {
+      background: #2a52be;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
       border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
+      font-weight: bold;
+      font-size: 13px;
       cursor: pointer;
-      transition: transform 0.1s, background 0.2s;
+      box-shadow: 0 4px 10px rgba(42, 82, 190, 0.4);
+      transition: transform 0.1s;
     }
-    .cell:active {
+
+    .btn-bonus:active {
       transform: scale(0.95);
     }
-    .cell.revealed-gem {
-      background: #2b4c3f;
-    }
-    .cell.revealed-bomb {
-      background: #4c2b2b;
-    }
-    .controls {
+
+    /* Настройки ставки */
+    .settings-row {
       width: 100%;
-      max-width: 400px;
+      max-width: 380px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .input-box {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 4px;
     }
-    .input-group {
-      display: flex;
-      gap: 10px;
+
+    .input-box label {
+      font-size: 11px;
+      font-weight: 800;
+      color: #6c728e;
+      letter-spacing: 0.5px;
     }
-    .input-field {
-      flex: 1;
-      background: #1e2029;
-      border: 1px solid #333647;
-      border-radius: 10px;
-      padding: 10px;
-      color: #fff;
-      font-size: 14px;
-    }
-    .btn-main {
-      width: 100%;
-      padding: 16px;
-      border: none;
-      border-radius: 14px;
-      background: #0088cc;
+
+    .input-box input, .input-box select {
+      background: #181b26;
+      border: 1px solid #282c3f;
+      border-radius: 12px;
+      padding: 12px;
       color: #fff;
       font-size: 16px;
       font-weight: bold;
-      cursor: pointer;
-      transition: background 0.2s;
+      outline: none;
     }
-    .btn-main.cashout {
-      background: #2ec4b6;
+
+    /* Главная кнопка */
+    .btn-action {
+      width: 100%;
+      max-width: 380px;
+      padding: 18px;
+      border: none;
+      border-radius: 18px;
+      background: #ff3399;
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(255, 51, 153, 0.4);
+      margin-bottom: 16px;
+      transition: transform 0.1s, background 0.2s;
+    }
+
+    .btn-action:active {
+      transform: scale(0.98);
+    }
+
+    .btn-action.cashout {
+      background: #00d285;
+      box-shadow: 0 6px 20px rgba(0, 210, 133, 0.4);
+    }
+
+    /* Статы раунда */
+    .stats-bar {
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 15px;
+      font-weight: 700;
+      color: #a0a5ba;
+      margin-bottom: 14px;
+    }
+
+    .stat-val {
+      color: #00e5ff;
+    }
+
+    .stat-profit {
+      color: #00d285;
+    }
+
+    /* Игровое поле */
+    .grid {
+      width: 100%;
+      max-width: 380px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+
+    .cell {
+      aspect-ratio: 1;
+      background: #251b4e;
+      border: 2px solid #3d2b80;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s, border-color 0.2s;
+      box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.05);
+    }
+
+    .cell:active {
+      transform: scale(0.92);
+    }
+
+    .cell.loading {
+      opacity: 0.6;
+      border-color: #00e5ff;
+    }
+
+    .cell.revealed-gem {
+      background: #1c2b4a;
+      border-color: #00e5ff;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+    }
+
+    .cell.revealed-bomb {
+      background: #4a1c24;
+      border-color: #ff3355;
+      box-shadow: 0 0 12px rgba(255, 51, 85, 0.4);
     }
   </style>
 </head>
 <body>
 
-  <div class="header">
-    <span>🍰 Cake Pop</span>
-    <div class="balance-box"><span id="balanceText">0</span> $CAKE</div>
+  <div class="title-logo">🧁 Cake Pop</div>
+
+  <div class="balance-card">
+    <div class="balance-text">Баланс: <span id="balanceText" class="balance-val">0</span> $CAKE</div>
+    <button class="btn-bonus" onclick="addBonus()">+500 🧁</button>
   </div>
 
-  <div class="stats-card">
-    <div>Множитель: <strong id="currentMult">1.00x</strong></div>
-    <div>Профит: <strong id="profitText" style="color:#2ec4b6">0 $CAKE</strong></div>
+  <div class="settings-row">
+    <div class="input-box">
+      <label>СТАВКА ($CAKE)</label>
+      <input type="number" id="betAmount" value="50">
+    </div>
+    <div class="input-box">
+      <label>ЛОУШКИ</label>
+      <select id="minesCount">
+        <option value="3">3</option>
+        <option value="5" selected>5</option>
+        <option value="10">10</option>
+      </select>
+    </div>
+  </div>
+
+  <button id="mainBtn" class="btn-action" onclick="handleMainAction()">НОВАЯ ИГРА</button>
+
+  <div class="stats-bar">
+    <div>Множитель: <span id="currentMult" class="stat-val">1.00x</span></div>
+    <div>Выигрыш: <span id="profitText" class="stat-profit">+0 $CAKE</span></div>
   </div>
 
   <div class="grid" id="grid"></div>
-
-  <div class="controls">
-    <div class="input-group">
-      <input type="number" id="betAmount" class="input-field" value="50" placeholder="Ставка">
-      <select id="minesCount" class="input-field">
-        <option value="3">3 мины</option>
-        <option value="5" selected>5 мин</option>
-        <option value="10">10 мин</option>
-      </select>
-    </div>
-    <button id="mainBtn" class="btn-main" onclick="handleMainAction()">СТАРТ</button>
-  </div>
 
   <script>
     const BACKEND_URL = 'https://cake-pop-bot.onrender.com';
@@ -156,8 +253,6 @@
 
     const GRID_SIZE = 25;
     let gameOver = true;
-    let currentMultiplier = 1.00;
-    let currentBet = 50;
     let balance = 0;
 
     function updateBalanceDisplay() {
@@ -180,7 +275,7 @@
 
     async function startGame() {
       const betInput = document.getElementById('betAmount');
-      currentBet = parseFloat(betInput.value);
+      const currentBet = parseFloat(betInput.value);
       const minesCount = parseInt(document.getElementById('minesCount').value);
 
       if (isNaN(currentBet) || currentBet <= 0) {
@@ -188,7 +283,7 @@
         return;
       }
       if (currentBet > balance) {
-        alert("Недостаточно $CAKE на балансе!");
+        alert("Недостаточно $CAKE!");
         return;
       }
 
@@ -197,17 +292,16 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            initData: initData,
+            initData,
             fallback_telegram_id: fallbackTelegramId,
             betAmount: currentBet,
-            minesCount: minesCount
+            minesCount
           })
         });
 
         const data = await response.json();
-
         if (!response.ok || data.error) {
-          alert(data.error || "Ошибка старта игры");
+          alert(data.error || "Ошибка старта");
           return;
         }
 
@@ -215,47 +309,45 @@
         updateBalanceDisplay();
 
         gameOver = false;
-        currentMultiplier = 1.00;
-
-        document.getElementById('betAmount').disabled = true;
+        betInput.disabled = true;
         document.getElementById('minesCount').disabled = true;
+
         document.getElementById('currentMult').innerText = '1.00x';
-        document.getElementById('profitText').innerText = '0 $CAKE';
-        
+        document.getElementById('profitText').innerText = '+0 $CAKE';
+
         const mainBtn = document.getElementById('mainBtn');
         mainBtn.innerText = "ЗАБРАТЬ (0 $CAKE)";
         mainBtn.classList.add('cashout');
 
-        const grid = document.getElementById('grid');
-        grid.innerHTML = '';
-        for (let i = 0; i < GRID_SIZE; i++) {
-          const cell = document.createElement('div');
-          cell.classList.add('cell');
-          cell.addEventListener('click', () => handleCellClick(cell, i));
-          grid.appendChild(cell);
-        }
-
+        renderEmptyGrid(true);
       } catch (err) {
         console.error('Ошибка старта:', err);
       }
     }
 
     async function handleCellClick(cell, index) {
-      if (gameOver || cell.dataset.revealed) return;
-      cell.dataset.revealed = "true";
+      if (gameOver || cell.dataset.revealed || cell.dataset.loading) return;
+
+      // Optimistic UI: даем отклик сразу
+      cell.dataset.loading = "true";
+      cell.classList.add('loading');
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 
       try {
         const response = await fetch(`${BACKEND_URL}/api/game/open-cell`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            initData: initData,
+            initData,
             fallback_telegram_id: fallbackTelegramId,
             cellIndex: index
           })
         });
 
         const data = await response.json();
+        delete cell.dataset.loading;
+        cell.classList.remove('loading');
+        cell.dataset.revealed = "true";
 
         if (data.hitMine) {
           cell.innerText = "❌";
@@ -264,21 +356,19 @@
         } else {
           cell.innerText = "🧁";
           cell.classList.add('revealed-gem');
-          
-          currentMultiplier = data.multiplier;
-          const winTotal = data.profit;
 
-          document.getElementById('currentMult').innerText = currentMultiplier + 'x';
-          document.getElementById('profitText').innerText = `+${winTotal} $CAKE`;
-          
+          document.getElementById('currentMult').innerText = data.multiplier + 'x';
+          document.getElementById('profitText').innerText = `+${data.profit} $CAKE`;
+
           const mainBtn = document.getElementById('mainBtn');
-          mainBtn.innerText = `ЗАБРАТЬ (${winTotal} $CAKE)`;
+          mainBtn.innerText = `ЗАБРАТЬ (${data.profit} $CAKE)`;
 
           if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
         }
-
       } catch (err) {
-        console.error('Ошибка открытия ячейки:', err);
+        delete cell.dataset.loading;
+        cell.classList.remove('loading');
+        console.error('Ошибка открытия:', err);
       }
     }
 
@@ -290,13 +380,12 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            initData: initData,
+            initData,
             fallback_telegram_id: fallbackTelegramId
           })
         });
 
         const data = await response.json();
-
         if (data.success) {
           balance = Number(data.balance);
           updateBalanceDisplay();
@@ -309,7 +398,7 @@
 
     function endGame(isWin, minesList = []) {
       gameOver = true;
-      
+
       if (minesList.length > 0) {
         const grid = document.getElementById('grid');
         minesList.forEach(mIndex => {
@@ -341,19 +430,37 @@
       }
     }
 
-    function renderEmptyGrid() {
+    function renderEmptyGrid(interactive = false) {
       const grid = document.getElementById('grid');
       if (!grid) return;
       grid.innerHTML = '';
       for (let i = 0; i < GRID_SIZE; i++) {
         const cell = document.createElement('div');
         cell.classList.add('cell');
+        if (interactive) {
+          cell.addEventListener('click', () => handleCellClick(cell, i));
+        }
         grid.appendChild(cell);
       }
     }
 
+    async function addBonus() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/bonus`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telegram_id: fallbackTelegramId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          balance = Number(data.balance);
+          updateBalanceDisplay();
+        }
+      } catch (e) {}
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
-      renderEmptyGrid();
+      renderEmptyGrid(false);
       fetchUserBalance();
     });
   </script>
