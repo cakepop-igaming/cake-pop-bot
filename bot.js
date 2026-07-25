@@ -1,3 +1,5 @@
+require('dotenv').config(); // На случай использования .env файла
+
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
@@ -8,14 +10,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Инициализация Supabase & Telegraf
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const botToken = process.env.BOT_TOKEN;
+// Считываем переменные окружения
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const botToken = process.env.BOT_TOKEN || '';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
-const bot = new Telegraf(botToken);
+if (!supabaseUrl || !supabaseKey) {
+  console.error("❌ ОШИБКА: Переменные SUPABASE_URL или SUPABASE_KEY не найдены в process.env!");
+}
 
+const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseKey || 'placeholder-key'
+);
+const bot = new Telegraf(botToken || '123456:placeholder');
 // Хранилище активных сессий игр в памяти
 const activeGames = new Map();
 
