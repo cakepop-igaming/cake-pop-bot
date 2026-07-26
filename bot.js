@@ -1,4 +1,4 @@
-require('dotenv').config(); // На случай использования .env файла
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -10,24 +10,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Считываем переменные окружения
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '';
-const botToken = process.env.BOT_TOKEN || '';
+// Переменные окружения
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+const botToken = process.env.BOT_TOKEN;
+const webAppUrl = process.env.WEBAPP_URL || 'https://cake-pop-nine.vercel.app';
 
+// Проверка наличия ключей перед запуском
 if (!supabaseUrl || !supabaseKey) {
-  console.error("❌ ОШИБКА: Переменные SUPABASE_URL или SUPABASE_KEY не найдены в process.env!");
+  console.error('❌ ОШИБКА: SUPABASE_URL или SUPABASE_KEY не найдены в process.env!');
 }
 
-const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseKey || 'placeholder-key'
-);
+if (!botToken) {
+  console.error('❌ ОШИБКА: BOT_TOKEN не найден в process.env!');
+}
+
+// Инициализация Supabase и Telegraf
+const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder-key');
 const bot = new Telegraf(botToken || '123456:placeholder');
-// Хранилище активных сессий игр в памяти
+
+// Хранилище активных игр
 const activeGames = new Map();
 
-// Проверка валидности Telegram initData (HMAC-SHA256)
+// Проверка HMAC валидности initData от Telegram
 function verifyTelegramWebAppData(initData) {
   if (!initData) return null;
   const urlParams = new URLSearchParams(initData);
@@ -51,7 +56,6 @@ function verifyTelegramWebAppData(initData) {
   return null;
 }
 
-// Вспомогательная функция для безопасного получения telegram_id
 function getAuthenticatedUserId(req) {
   const { initData, fallback_telegram_id } = req.body;
   const verifiedUser = verifyTelegramWebAppData(initData);
@@ -59,25 +63,24 @@ function getAuthenticatedUserId(req) {
   return fallback_telegram_id;
 }
 
-// Функция для обновления сообщения с балансом в чате Telegram
+// Функция обновления/отправки сообщения с балансом в чате
 async function updateTelegramChatMessage(telegramId, newBalance) {
   try {
     const text = `🍰 **Добро пожаловать в Cake Pop!**\n\nТвой текущий баланс: **${Math.floor(newBalance)} $CAKE**\n\nНажми кнопку ниже, чтобы запустить Mini App и сыграть!`;
-    // Отправляем или обновляем сообщение (Telegram API позволяет отправить новое или изменить текущее)
     await bot.telegram.sendMessage(telegramId, text, {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🧁 Играть в Cake Pop", web_app: { url: process.env.WEBAPP_URL || "https://cake-pop-nine.vercel.app" } }]
+          [{ text: "🧁 Играть в Cake Pop", web_app: { url: webAppUrl } }]
         ]
       }
     });
   } catch (err) {
-    console.error("Ошибка обновления сообщения в TG:", err.message);
+    console.error("Не удалось обновить сообщение в TG:", err.message);
   }
 }
 
-// Команда /start в Telegram
+// Команда /start
 bot.start(async (ctx) => {
   const telegramId = ctx.from.id;
   const username = ctx.from.username || ctx.from.first_name || 'Player';
@@ -100,14 +103,14 @@ bot.start(async (ctx) => {
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🧁 Играть в Cake Pop", web_app: { url: process.env.WEBAPP_URL || "https://cake-pop-nine.vercel.app" } }]
+          [{ text: "🧁 Играть в Cake Pop", web_app: { url: webAppUrl } }]
         ]
       }
     }
   );
 });
 
-// GET /api/user — получение баланса
+// GET /api/user — Баланс
 app.get('/api/user', async (req, res) => {
   const telegramId = req.query.telegram_id;
   if (!telegramId) return res.status(400).json({ error: 'Missing telegram_id' });
@@ -121,7 +124,7 @@ app.get('/api/user', async (req, res) => {
   }
 });
 
-// POST /api/game/start — Старт игры
+// POST /api/game/start — Старт раунда
 app.post('/api/game/start', async (req, res) => {
   const telegramId = getAuthenticatedUserId(req);
   const { betAmount, minesCount } = req.body;
@@ -133,7 +136,6 @@ app.post('/api/game/start', async (req, res) => {
     return res.status(400).json({ error: 'Недостаточно $CAKE на балансе' });
   }
 
-  // Генерируем мины
   const mines = [];
   while (mines.length < minesCount) {
     const rand = Math.floor(Math.random() * 25);
@@ -154,7 +156,7 @@ app.post('/api/game/start', async (req, res) => {
   res.json({ success: true, balance: newBalance });
 });
 
-// POST /api/game/open-cell — Открытие ячейки
+// POST /api/game/open-cell — Открытие клетки
 app.post('/api/game/open-cell', async (req, res) => {
   const telegramId = getAuthenticatedUserId(req);
   const { cellIndex } = req.body;
@@ -166,7 +168,6 @@ app.post('/api/game/open-cell', async (req, res) => {
     const allMines = game.mines;
     activeGames.delete(telegramId);
 
-    // Получаем текущий баланс для уведомления
     const { data: user } = await supabase.from('users').select('balance').eq('telegram_id', telegramId).single();
     if (user) updateTelegramChatMessage(telegramId, user.balance);
 
@@ -177,7 +178,6 @@ app.post('/api/game/open-cell', async (req, res) => {
     game.revealedCells.push(cellIndex);
   }
 
-  // Расчет множителя
   const safeCellsCount = 25 - game.minesCount;
   const openedCount = game.revealedCells.length;
   let mult = 1.00;
@@ -213,7 +213,6 @@ app.post('/api/game/cashout', async (req, res) => {
   const allMines = game.mines;
   activeGames.delete(telegramId);
 
-  // Обновляем сообщение в чате Telegram
   updateTelegramChatMessage(telegramId, newBalance);
 
   res.json({
@@ -224,7 +223,7 @@ app.post('/api/game/cashout', async (req, res) => {
   });
 });
 
-// POST /api/bonus — Бонус +500
+// POST /api/bonus — Кликер / Бонус +500
 app.post('/api/bonus', async (req, res) => {
   const { telegram_id } = req.body;
   if (!telegram_id) return res.status(400).json({ error: 'Missing telegram_id' });
@@ -240,10 +239,19 @@ app.post('/api/bonus', async (req, res) => {
   res.json({ success: true, balance: newBalance });
 });
 
-// Запуск сервера
+// Запуск HTTP-сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-bot.launch();
+// Запуск бота только при наличии токена
+if (botToken) {
+  bot.launch()
+    .then(() => console.log('Telegram Bot successfully started!'))
+    .catch((err) => console.error('Error starting bot:', err.message));
+}
+
+// Плавная остановка процесса
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
