@@ -10,7 +10,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Глобальный перехват ошибок для предотвращения падения сервера
 process.on('unhandledRejection', (reason, promise) => {
   console.error('⚠️ Unhandled Rejection:', reason);
 });
@@ -19,28 +18,17 @@ process.on('uncaughtException', (err) => {
   console.error('💥 Uncaught Exception:', err);
 });
 
-// Переменные окружения
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 const botToken = process.env.BOT_TOKEN;
 const webAppUrl = process.env.WEBAPP_URL || 'https://cake-pop-nine.vercel.app';
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ ОШИБКА: SUPABASE_URL или SUPABASE_KEY не найдены в process.env!');
-}
-
-if (!botToken) {
-  console.error('❌ ОШИБКА: BOT_TOKEN не найден в process.env!');
-}
-
-// Инициализация Supabase и Telegraf
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder-key');
 const bot = new Telegraf(botToken || '123456:placeholder');
 
 // Хранилище активных игр
 const activeGames = new Map();
 
-// Проверка HMAC валидности initData от Telegram
 function verifyTelegramWebAppData(initData) {
   if (!initData) return null;
   try {
@@ -75,20 +63,33 @@ function getAuthenticatedUserId(req) {
   return fallback_telegram_id;
 }
 
-// Обновление/отправка сообщения с балансом в чате TG
+// 🔄 Обновление ОДНОГО существующего сообщения с балансом
 async function updateTelegramChatMessage(telegramId, newBalance) {
   try {
+    const { data: user } = await supabase.from('users').select('last_msg_id').eq('telegram_id', telegramId).single();
     const text = `🍰 **Добро пожаловать в Cake Pop!**\n\nТвой текущий баланс: **${Math.floor(newBalance)} $CAKE**\n\nНажми кнопку ниже, чтобы запустить Mini App и сыграть!`;
-    await bot.telegram.sendMessage(telegramId, text, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🧁 Играть в Cake Pop", web_app: { url: webAppUrl } }]
-        ]
-      }
-    });
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: "🧁 Играть в Cake Pop", web_app: { url: webAppUrl } }]
+      ]
+    };
+
+    if (user && user.last_msg_id) {
+      // Редактируем старое сообщение
+      await bot.telegram.editMessageText(telegramId, user.last_msg_id, null, text, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+    } else {
+      // Если ID нет, отправляем новое и сохраняем ID
+      const sentMsg = await bot.telegram.sendMessage(telegramId, text, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+      await supabase.from('users').update({ last_msg_id: sentMsg.message_id }).eq('telegram_id', telegramId);
+    }
   } catch (err) {
-    console.error("Не удалось обновить сообщение в TG:", err.message);
+    console.error("Не удалось обновить сообщение в TG (возможно, оно не изменилось или удалено):", err.message);
   }
 }
 
@@ -110,17 +111,19 @@ bot.start(async (ctx) => {
     }
 
     const balance = user ? user.balance : 1000;
+    const text = `🍰 **Добро пожаловать в Cake Pop!**\n\nТвой текущий баланс: **${Math.floor(balance)} $CAKE**\n\nНажми кнопку ниже, чтобы запустить Mini App и сыграть!`;
 
-    ctx.replyWithMarkdown(
-      `🍰 **Добро пожаловать в Cake Pop!**\n\nТвой текущий баланс: **${Math.floor(balance)} $CAKE**\n\nНажми кнопку ниже, чтобы запустить Mini App и сыграть!`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "🧁 Играть в Cake Pop", web_app: { url: webAppUrl } }]
-          ]
-        }
+    const sentMsg = await ctx.replyWithMarkdown(text, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🧁 Играть в Cake Pop", web_app: { url: webAppUrl } }]
+        ]
       }
-    );
+    });
+
+    // Сохраняем ID отправленного сообщения
+    await supabase.from('users').update({ last_msg_id: sentMsg.message_id }).eq('telegram_id', telegramId);
+
   } catch (err) {
     console.error('Error in /start:', err.message);
   }
@@ -143,12 +146,17 @@ app.get('/api/user', async (req, res) => {
   }
 });
 
-// POST /api/game/start — Старт раунда
+// POST /api/game/start — Старт раунда (с защитой от 2 устройств)
 app.post('/api/game/start', async (req, res) => {
   const telegramId = getAuthenticatedUserId(req);
   const { betAmount, minesCount } = req.body;
 
   if (!telegramId) return res.status(401).json({ error: 'Unauthorized' });
+
+  // 🚫 ЗАЩИТА: Если у пользователя УЖЕ есть активная игра на другом устройстве
+  if (activeGames.has(telegramId)) {
+    return res.status(400).json({ error: 'Игра уже запущена на другом устройстве!' });
+  }
 
   try {
     const { data: user } = await supabase.from('users').select('balance').eq('telegram_id', telegramId).single();
@@ -220,14 +228,13 @@ app.post('/api/game/open-cell', async (req, res) => {
   });
 });
 
-// POST /api/game/cashout — Забрать выигрыш (с защитой от race condition)
+// POST /api/game/cashout — Забрать выигрыш
 app.post('/api/game/cashout', async (req, res) => {
   const telegramId = getAuthenticatedUserId(req);
   const game = activeGames.get(telegramId);
 
   if (!game) return res.status(400).json({ error: 'Активная игра не найдена' });
 
-  // Защита от мульти-кликов
   if (game.isProcessing) {
     return res.status(429).json({ error: 'Запрос уже обрабатывается' });
   }
@@ -284,7 +291,6 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Запуск бота
 if (botToken) {
   bot.launch()
     .then(() => console.log('Telegram Bot successfully started!'))
